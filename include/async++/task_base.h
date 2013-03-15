@@ -376,31 +376,30 @@ template<typename Task> typename Task::internal_task_type* get_internal_task(con
 }
 
 // Common code for task unwrapping
+template<typename Result, typename Func, typename Child> struct unwrapped_func {
+	task_ptr parent_task;
+	unwrapped_func(task_ptr t): parent_task(std::move(t)) {}
+	void operator()(Child child_task) const
+	{
+		// Forward completion state and result to parent task
+		try {
+			if (get_internal_task(child_task)->state.load(std::memory_order_relaxed) == task_state::TASK_COMPLETED) {
+				static_cast<task_result<Result>*>(parent_task.get())->set_result(get_internal_task(child_task)->get_result(child_task));
+				parent_task->finish();
+			} else
+				static_cast<task_func<Func, Result>*>(parent_task.get())->cancel(get_internal_task(child_task)->except);
+		} catch (...) {
+			// If the copy/move constructor of the result threw, propagate the exception
+			static_cast<task_func<Func, Result>*>(parent_task.get())->cancel(std::current_exception());
+		}
+	}
+};
 template<typename Result, typename Func, typename Child>
 void unwrapped_finish(task_base* parent_base, Child child_task)
 {
-	struct unwrap_func {
-		unwrap_func(task_ptr t): parent_task(std::move(t)) {}
-		void operator()(Child child_task) const
-		{
-			// Forward completion state and result to parent task
-			try {
-				if (get_internal_task(child_task)->state.load(std::memory_order_relaxed) == task_state::TASK_COMPLETED) {
-					static_cast<task_result<Result>*>(this->parent_task.get())->set_result(get_internal_task(child_task)->get_result(child_task));
-					this->parent_task->finish();
-				} else
-					static_cast<task_func<Func, Result>*>(this->parent_task.get())->cancel(get_internal_task(child_task)->except);
-			} catch (...) {
-				// If the copy/move constructor of the result threw, propagate the exception
-				static_cast<task_func<Func, Result>*>(this->parent_task.get())->cancel(std::current_exception());
-			}
-		}
-		task_ptr parent_task;
-	};
-
 	// Save a reference to the parent in the continuation
 	parent_base->add_ref();
-	child_task.then(inline_scheduler(), unwrap_func(task_ptr(parent_base)));
+	child_task.then(inline_scheduler(), unwrapped_func<Result, Func, Child>(task_ptr(parent_base)));
 }
 
 // Execution functions for root tasks:

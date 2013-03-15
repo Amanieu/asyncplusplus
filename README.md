@@ -6,10 +6,7 @@ Async++ is a lightweight concurrency framework for C++11. The concept was inspir
 Building and installing
 ------------------
 
-You need a C++11 compiler to build Async++. As of this writing, only GCC 4.7 on Linux is know to support enough of C++11 to be used.
-Clang is mostly supported, but it has library issues with both libc++ and libstdc++ which will cause errors at compile-time or run-time.
-Mac OS X is probably supported, but hasn't been tested.
-Windows is not supported because C++11 isn't fully implemented yet by either GCC or MSVC.
+You need a C++11 compiler to build Async++. As of this writing, only GCC 4.7 and Clang 3.2 (with both libstdc++ and libc++) are known to work.
 
 Async++ can be built as a static or shared library using the `build-static.sh` and `build-shared.sh` scripts.
 
