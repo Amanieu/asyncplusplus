@@ -110,6 +110,12 @@ public:
 	{
 		return p;
 	}
+	T* release()
+	{
+		T* out = p;
+		p = nullptr;
+		return out;
+	}
 
 	explicit operator bool() const
 	{

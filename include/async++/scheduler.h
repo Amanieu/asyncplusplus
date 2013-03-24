@@ -49,6 +49,19 @@ public:
 		handle->execute();
 		handle = nullptr;
 	}
+
+	// Conversion to and from void pointer. This allows the task handle to be
+	// sent through interfaces which don't preserve types.
+	void* to_void_ptr()
+	{
+		return handle.release();
+	}
+	static task_handle from_void_ptr(void* ptr)
+	{
+		task_handle out;
+		out.handle = detail::task_ptr(static_cast<detail::task_base*>(ptr));
+		return out;
+	}
 };
 
 // Scheduler interface
