@@ -146,10 +146,9 @@ static void remove_waiter(auto_reset_event& thread_event)
 static task_handle steal_task()
 {
 	// Make a list of victim thread ids and shuffle it
-	// Using a VLA here which technically isn't standard C++, but it works
-	int victims[num_threads];
-	std::iota(victims, victims + num_threads, 0);
-	std::shuffle(victims, victims + num_threads, thread_data[thread_id].rng);
+	std::vector<int> victims(num_threads);
+	std::iota(victims.begin(), victims.end(), 0);
+	std::shuffle(victims.begin(), victims.end(), thread_data[thread_id].rng);
 
 	// Try to steal from another thread
 	for (int i: victims) {
