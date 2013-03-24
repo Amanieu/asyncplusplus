@@ -236,7 +236,7 @@ struct task_base: public ref_count_base<task_base> {
 
 // Result type-specific task object
 template<typename Result> struct task_result: public task_base {
-	typename std::aligned_storage<sizeof(Result), alignof(Result)>::type result;
+	typename std::aligned_storage<sizeof(Result), std::alignment_of<Result>::value>::type result;
 
 	template<typename T> void set_result(T&& t)
 	{
@@ -300,7 +300,7 @@ template<> struct task_result<fake_void>: public task_base {
 
 // Class to hold a function object and initialize/destroy it
 template<typename Func, typename = void> struct func_holder {
-	typename std::aligned_storage<sizeof(Func), alignof(Func)>::type func;
+	typename std::aligned_storage<sizeof(Func), std::alignment_of<Func>::value>::type func;
 
 	Func& get_func()
 	{

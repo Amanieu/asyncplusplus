@@ -21,9 +21,12 @@
 #include <algorithm>
 #include <atomic>
 #include <memory>
+#include <mutex>
+#include <numeric>
 #include <random>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <vector>
 #include <cstdlib>
 
@@ -50,7 +53,13 @@
 #endif
 
 // Cacheline alignment to avoid false sharing between different threads
+#ifdef __GNUC__
 #define CACHELINE_ALIGN __attribute__((aligned(64)))
+#elif _MSC_VER
+#define CACHELINE_ALIGN __declspec(aligned(64))
+#else
+#define CACHELINE_ALIGN alignas(64)
+#endif
 
 namespace async {
 namespace detail {
@@ -106,7 +115,7 @@ static auto_reset_event& get_thread_event()
 #else
 	// Work around lack of dynamic initialization for thread local storage
 	static thread_local bool thread_event_init = false;
-	static thread_local typename std::aligned_storage<sizeof(auto_reset_event), alignof(auto_reset_event)>::type thread_event_storage;
+	static thread_local std::aligned_storage<sizeof(auto_reset_event), std::alignment_of<auto_reset_event>::value>::type thread_event_storage;
 	auto_reset_event& thread_event = reinterpret_cast<auto_reset_event&>(thread_event_storage);
 	if (!thread_event_init) {
 		new (&thread_event) auto_reset_event;
@@ -233,7 +242,7 @@ default_scheduler_impl::default_scheduler_impl()
 	waiters.reserve(num_threads);
 
 	// Allocate per-thread data
-	thread_data.reset(static_cast<thread_data_t*>(aligned_alloc(sizeof(thread_data_t) * num_threads, alignof(thread_data_t))));
+	thread_data.reset(static_cast<thread_data_t*>(aligned_alloc(sizeof(thread_data_t) * num_threads, std::alignment_of<thread_data_t>::value)));
 	for (int i = 0; i < num_threads; i++)
 		new (&thread_data[i]) thread_data_t;
 
