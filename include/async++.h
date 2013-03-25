@@ -31,6 +31,11 @@
 #include <utility>
 #include <vector>
 
+// SSE intrinsics for _mm_pause
+#if defined(__SSE__) || _M_IX86_FP > 0
+#include <xmmintrin.h>
+#endif
+
 // Export declaration to make symbols visible for dll/so
 #ifdef LIBASYNC_STATIC
 # define LIBASYNC_EXPORT
@@ -50,6 +55,11 @@
 // original can still be accessed through async::default_scheduler().
 #ifndef LIBASYNC_DEFAULT_SCHEDULER
 # define LIBASYNC_DEFAULT_SCHEDULER async::default_scheduler()
+#endif
+
+// Force symbol visibility to hidden unless explicity exported
+#ifdef __GNUC__
+#pragma GCC visibility push(hidden)
 #endif
 
 // Some forward declarations
@@ -73,5 +83,9 @@ struct LIBASYNC_EXPORT task_canceled {};
 #include "async++/task.h"
 #include "async++/when_all_any.h"
 #include "async++/cancel.h"
+
+#ifdef __GNUC__
+#pragma GCC visibility pop
+#endif
 
 #endif

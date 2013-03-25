@@ -22,11 +22,6 @@
 # error "Do not include this header directly, include <async++.h> instead."
 #endif
 
-// SSE intrinsics for _mm_pause
-#if defined(__SSE__) || _M_IX86_FP > 0
-#include <xmmintrin.h>
-#endif
-
 namespace async {
 namespace detail {
 
