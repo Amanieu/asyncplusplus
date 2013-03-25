@@ -146,14 +146,14 @@ public:
 
 	// Add a continuation to the task
 	template<typename Sched, typename Func>
-	typename continuation_traits<task, Func>::task_type then(Sched& sched, Func&& f)
+	typename detail::continuation_traits<task, Func>::task_type then(Sched& sched, Func&& f)
 	{
 		auto result = this->then_internal(sched, std::forward<Func>(f), std::move(*this));
 		this->internal_task = nullptr;
 		return result;
 	}
 	template<typename Func>
-	typename continuation_traits<task, Func>::task_type then(Func&& f)
+	typename detail::continuation_traits<task, Func>::task_type then(Func&& f)
 	{
 		return then(LIBASYNC_DEFAULT_SCHEDULER, std::forward<Func>(f));
 	}
@@ -194,12 +194,12 @@ public:
 
 	// Add a continuation to the task
 	template<typename Sched, typename Func>
-	typename continuation_traits<shared_task, Func>::task_type then(Sched& sched, Func&& f) const
+	typename detail::continuation_traits<shared_task, Func>::task_type then(Sched& sched, Func&& f) const
 	{
 		return this->then_internal(sched, std::forward<Func>(f), *this);
 	}
 	template<typename Func>
-	typename continuation_traits<shared_task, Func>::task_type then(Func&& f) const
+	typename detail::continuation_traits<shared_task, Func>::task_type then(Func&& f) const
 	{
 		return then(LIBASYNC_DEFAULT_SCHEDULER, std::forward<Func>(f));
 	}
