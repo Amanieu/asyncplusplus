@@ -38,8 +38,11 @@
 #include "work_steal_queue.h"
 
 // thread_local keyword support
-#if __has_feature(cxx_thread_local) || \
-   (__GNUC__ * 100 + __GNUC_MINOR__ >= 408 && !defined(__MINGW32__))
+#ifdef __clang__
+# if __has_feature(cxx_thread_local)
+#  define HAVE_THREAD_LOCAL
+# endif
+#elif __GNUC__ * 100 + __GNUC_MINOR__ >= 408 && !defined(__MINGW32__)
 # define HAVE_THREAD_LOCAL
 #endif
 
