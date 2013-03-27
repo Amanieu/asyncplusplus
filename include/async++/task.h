@@ -111,6 +111,112 @@ protected:
 	}
 };
 
+// Common code for event_task specializations
+template<typename Result> class basic_event {
+protected:
+	// Reference counted internal task object
+	detail::task_ptr internal_task;
+
+	// Real result type, with void turned into fake_void
+	typedef typename detail::void_to_fake_void<Result>::type internal_result;
+
+	// Type-specific task object
+	typedef detail::task_result<internal_result> internal_task_type;
+
+public:
+	// Movable but not copyable
+	basic_event(const basic_event&) = delete;
+	basic_event(basic_event&& other)
+		: internal_task(std::move(other.internal_task))
+	{
+		other.internal_task = nullptr;
+	}
+	basic_event& operator=(const basic_event&) = delete;
+	basic_event& operator=(basic_event&& other)
+	{
+		std::swap(internal_task, other.internal_task);
+	}
+
+	// Main constructor
+	basic_event()
+		: internal_task(new internal_task_type) {}
+
+	// Cancel events if they are destroyed before they are set
+	~basic_event()
+	{
+		// This has no effect if a result is already set
+		if (internal_task)
+			cancel();
+	}
+
+	// Get a task linked to this event
+	task<Result> get_task() const
+	{
+		// Catch use of uninitialized task objects
+		if (!internal_task)
+			throw std::invalid_argument("Use of empty event_task object");
+
+		// Make sure this is only called once (ref_count == 1)
+		unsigned int expected = 1;
+		if (!internal_task->ref_count.compare_exchange_strong(expected, 2, std::memory_order_relaxed, std::memory_order_relaxed))
+			throw std::invalid_argument("event_task::get_task() called more than once");
+
+		// Ref count is now 2, no need to increment it again
+		task<Result> out;
+		out.internal_task = detail::task_ptr(internal_task.get());
+		return out;
+	}
+
+	// Cancel the event with an exception and cancel continuations
+	bool set_exception(std::exception_ptr except) const
+	{
+		// Catch use of uninitialized task objects
+		if (!internal_task)
+			throw std::invalid_argument("Use of empty event_task object");
+
+		// Only allow setting the value once
+		detail::task_state expected = detail::task_state::TASK_PENDING;
+		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_relaxed, std::memory_order_relaxed))
+			return false;
+
+		// Cancel the task
+		internal_task->task_base::cancel(std::move(except));
+		return true;
+	}
+
+	// Cancel the event as if with cancel_current_task
+	bool cancel() const
+	{
+		return set_exception(nullptr);
+	}
+
+protected:
+	// Common code for set()
+	template<typename T> bool set_internal(T&& result) const
+	{
+		// Catch use of uninitialized task objects
+		if (!internal_task)
+			throw std::invalid_argument("Use of empty event_task object");
+
+		// Only allow setting the value once
+		detail::task_state expected = detail::task_state::TASK_PENDING;
+		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_relaxed, std::memory_order_relaxed))
+			return false;
+
+		try {
+			// Store the result and finish
+			static_cast<internal_task_type*>(internal_task.get())->set_result(std::forward<T>(result));
+			internal_task->finish();
+		} catch (...) {
+			// If the copy/move constructor of the result threw, save the exception.
+			// We could also return the exception to the caller, but this would
+			// cause race conditions.
+			internal_task->cancel(std::current_exception());
+		}
+		return true;
+	}
+};
+
 } // namespace detail
 
 template<typename Result> class task: public detail::basic_task<Result> {
@@ -118,7 +224,7 @@ template<typename Result> class task: public detail::basic_task<Result> {
 	template<typename T> friend task<typename std::decay<T>::type> make_task(T&& value);
 	friend task<void> make_task();
 	template<typename Sched, typename Func> friend task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn(Sched& sched, Func&& f);
-	friend class event_task<Result>;
+	friend class detail::basic_event<Result>;
 
 public:
 	// Movable but not copyable
@@ -129,19 +235,11 @@ public:
 	task& operator=(task&&) = default;
 
 	// Get the result of the task
-	template<typename T = Result, typename = typename std::enable_if<std::is_void<T>::value>::type> 
-	void get()
+	Result get()
 	{
-		this->get_internal();
-		this->internal_task = nullptr;
-	}
-	template<typename T = Result, typename = typename std::enable_if<!std::is_void<T>::value>::type>
-	T get()
-	{
-		// Release internal_task after this function, but make sure we copy the result over first
 		this->get_internal();
 		detail::task_ptr my_internal = std::move(this->internal_task);
-		return static_cast<typename task::internal_task_type*>(my_internal.get())->get_result(*this);
+		return detail::fake_void_to_void(static_cast<typename task::internal_task_type*>(my_internal.get())->get_result(*this));
 	}
 
 	// Add a continuation to the task
@@ -171,6 +269,15 @@ template<typename Result> class shared_task: public detail::basic_task<Result> {
 	// Friend access for task::share
 	friend class task<Result>;
 
+	// get() return value: const Result& -or- void
+	typedef typename std::conditional<
+		std::is_void<Result>::value,
+		void,
+		typename std::add_lvalue_reference<
+			typename std::add_const<Result>::type
+		>::type
+	>::type get_result;
+
 public:
 	// Movable and copyable
 	shared_task() = default;
@@ -180,16 +287,10 @@ public:
 	shared_task& operator=(shared_task&&) = default;
 
 	// Get the result of the task
-	template<typename T = Result, typename = typename std::enable_if<std::is_void<T>::value>::type> 
-	void get() const
+	get_result get() const
 	{
 		this->get_internal();
-	}
-	template<typename T = Result, typename = typename std::enable_if<!std::is_void<T>::value>::type>
-	const T& get() const
-	{
-		this->get_internal();
-		return detail::get_internal_task(*this)->get_result(*this);
+		return detail::fake_void_to_void(detail::get_internal_task(*this)->get_result(*this));
 	}
 
 	// Add a continuation to the task
@@ -206,118 +307,57 @@ public:
 };
 
 // Special task type which can be triggered manually rather than when a function executes.
-template<typename Result> class event_task {
-	// Reference counted internal task object
-	detail::task_ptr internal_task;
-
-	// Real result type, with void turned into fake_void
-	typedef typename detail::void_to_fake_void<Result>::type internal_result;
-
-	// Type-specific task object
-	typedef detail::task_result<internal_result> internal_task_type;
-
+template<typename Result> class event_task: public detail::basic_event<Result> {
 public:
 	// Movable but not copyable
+	event_task() = default;
 	event_task(const event_task&) = delete;
 	event_task(event_task&&) = default;
 	event_task& operator=(const event_task&) = delete;
-	event_task& operator=(event_task&& other)
-	{
-		// Make sure the destructor is called on the previous value
-		std::swap(internal_task, other.internal_task);
-	}
-
-	// Main constructor
-	event_task()
-		: internal_task(new internal_task_type) {}
-
-	// Cancel events if they are destroyed before they are set
-	~event_task()
-	{
-		// This has no effect if a result is already set
-		if (internal_task)
-			cancel();
-	}
-
-	// Get a task linked to this event
-	task<Result> get_task() const
-	{
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			throw std::invalid_argument("Use of empty event_task object");
-
-		// Make sure this is only called once (ref_count == 1)
-		unsigned int expected = 1;
-		if (!internal_task->ref_count.compare_exchange_strong(expected, 2, std::memory_order_relaxed, std::memory_order_relaxed))
-			throw std::invalid_argument("event_task::get_task() called more than once");
-
-		// Ref count is now 2, no need to increment it again
-		task<Result> out;
-		out.internal_task = detail::task_ptr(internal_task.get());
-		return out;
-	}
+	event_task& operator=(event_task&& other) = default;
 
 	// Set the result of the task, mark it as completed and run its continuations
-	template<typename T = Result, typename = typename std::enable_if<std::is_void<T>::value>::type> bool set()
+	bool set(const Result& result) const
 	{
-		return set_internal(detail::fake_void());
+		return this->set_internal(result);
 	}
-	template<typename T = Result> bool set(const typename std::enable_if<!std::is_void<T>::value, Result>::type& result) const
+	bool set(Result&& result) const
 	{
-		return set_internal(result);
+		return this->set_internal(std::move(result));
 	}
-	template<typename T = Result> bool set(typename std::enable_if<!std::is_void<T>::value && !std::is_reference<T>::value, Result>::type&& result) const
+};
+
+// Specialization for references
+template<typename Result> class event_task<Result&>: public detail::basic_event<Result&> {
+public:
+	// Movable but not copyable
+	event_task() = default;
+	event_task(const event_task&) = delete;
+	event_task(event_task&&) = default;
+	event_task& operator=(const event_task&) = delete;
+	event_task& operator=(event_task&& other) = default;
+
+	// Set the result of the task, mark it as completed and run its continuations
+	bool set(Result& result) const
 	{
-		return set_internal(std::move(result));
+		return this->set_internal(result);
 	}
+};
 
-	// Cancel the event with an exception and cancel continuations
-	bool set_exception(std::exception_ptr except) const
+// Specialization for void
+template<> class event_task<void>: public detail::basic_event<void> {
+public:
+	// Movable but not copyable
+	event_task() = default;
+	event_task(const event_task&) = delete;
+	event_task(event_task&&) = default;
+	event_task& operator=(const event_task&) = delete;
+	event_task& operator=(event_task&& other) = default;
+
+	// Set the result of the task, mark it as completed and run its continuations
+	bool set()
 	{
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			throw std::invalid_argument("Use of empty event_task object");
-
-		// Only allow setting the value once
-		detail::task_state expected = detail::task_state::TASK_PENDING;
-		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_relaxed, std::memory_order_relaxed))
-			return false;
-
-		// Cancel the task
-		internal_task->task_base::cancel(std::move(except));
-		return true;
-	}
-
-	// Cancel the event as if with cancel_current_task
-	bool cancel() const
-	{
-		return set_exception(nullptr);
-	}
-
-private:
-	// Common code for set()
-	template<typename T> bool set_internal(T&& result) const
-	{
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			throw std::invalid_argument("Use of empty event_task object");
-
-		// Only allow setting the value once
-		detail::task_state expected = detail::task_state::TASK_PENDING;
-		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_relaxed, std::memory_order_relaxed))
-			return false;
-
-		try {
-			// Store the result and finish
-			static_cast<internal_task_type*>(internal_task.get())->set_result(std::forward<T>(result));
-			internal_task->finish();
-		} catch (...) {
-			// If the copy/move constructor of the result threw, save the exception.
-			// We could also return the exception to the caller, but this would
-			// cause race conditions.
-			internal_task->cancel(std::current_exception());
-		}
-		return true;
+		return this->set_internal(detail::fake_void());
 	}
 };
 
@@ -383,16 +423,10 @@ public:
 	}
 
 	// Get the result of the task
-	template<typename T = result_type, typename = typename std::enable_if<std::is_void<T>::value>::type> 
-	void get()
+	result_type get()
 	{
 		internal_task.wait_and_throw();
-	}
-	template<typename T = result_type, typename = typename std::enable_if<!std::is_void<T>::value>::type>
-	T get()
-	{
-		internal_task.wait_and_throw();
-		return internal_task.get_result(task<result_type>());
+		return detail::fake_void_to_void(internal_task.get_result(task<result_type>()));
 	}
 };
 

@@ -28,6 +28,11 @@ namespace detail {
 // Pseudo-void type: it takes up no space but can be moved and copied
 struct fake_void {};
 template<typename T> using void_to_fake_void = std::conditional<std::is_void<T>::value, fake_void, T>;
+template<typename T> T&& fake_void_to_void(T&& x)
+{
+	return std::forward<T>(x);
+}
+inline void fake_void_to_void(fake_void) {}
 
 // Check if type is a task type, used to detect task unwraping
 template<typename T> struct is_task: public std::false_type {};
