@@ -64,27 +64,27 @@ template<typename Func, typename... Args> std::false_type is_callable_helper(...
 template<typename T> struct is_callable;
 template<typename Func, typename... Args> struct is_callable<Func(Args...)>: public decltype(is_callable_helper<Func, Args...>(0)) {};
 
-// Wrapper to run a function object and transform void returns into fake_void
+// Wrapper to run a function object with an optional parameter:
+// - void returns are turned into fake_void
+// - fake_void parameter will invoke the function with no arguments
 template<typename Func, typename = typename std::enable_if<!std::is_void<decltype(std::declval<Func>()())>::value>::type>
-decltype(std::declval<Func>()()) invoke_fakevoid(Func&& f)
+decltype(std::declval<Func>()()) invoke_fake_void(Func&& f)
 {
 	return std::forward<Func>(f)();
 }
 template<typename Func, typename = typename std::enable_if<std::is_void<decltype(std::declval<Func>()())>::value>::type>
-fake_void invoke_fakevoid(Func&& f)
+fake_void invoke_fake_void(Func&& f)
 {
 	std::forward<Func>(f)();
 	return fake_void();
 }
-
-// Wrapper to run a continuation function with an optional parameter
-template<typename Func, typename Param> auto invoke_fakevoid_param(Func&& f, Param&& p) -> decltype(std::forward<Func>(f)(std::forward<Param>(p)))
+template<typename Func, typename Param> typename void_to_fake_void<decltype(std::declval<Func>()(std::declval<Param>()))>::type invoke_fake_void(Func&& f, Param&& p)
 {
-	return std::forward<Func>(f)(std::forward<Param>(p));
+	return invoke_fake_void([&f, &p] {return std::forward<Func>(f)(std::forward<Param>(p));});
 }
-template<typename Func> auto invoke_fakevoid_param(Func&& f, fake_void) -> decltype(std::forward<Func>(f)())
+template<typename Func> typename void_to_fake_void<decltype(std::declval<Func>()())>::type invoke_fake_void(Func&& f, fake_void)
 {
-	return std::forward<Func>(f)();
+	return invoke_fake_void(std::forward<Func>(f));
 }
 
 // Various properties of a continuation function
@@ -103,7 +103,7 @@ struct continuation_traits {
 	typedef decltype(is_value_cont_helper(std::declval<Func>(), std::declval<Parent>(), 0, 0)) is_value_cont;
 	static_assert(!std::is_void<is_value_cont>::value, "Parameter type for continuation function is invalid for parent task type");
 	typedef typename std::conditional<is_value_cont::value, typename void_to_fake_void<decltype(std::declval<Parent>().get())>::type, Parent>::type param_type;
-	typedef decltype(invoke_fakevoid_param(std::declval<Func>(), std::declval<param_type>())) result_type;
+	typedef decltype(fake_void_to_void(invoke_fake_void(std::declval<Func>(), std::declval<param_type>()))) result_type;
 	typedef task<typename remove_task<result_type>::type> task_type;
 };
 

@@ -409,7 +409,7 @@ template<typename Result, typename Func, bool Unwrap> struct root_exec_func: pri
 	root_exec_func(Func&& f): func_type(std::forward<Func>(f)) {}
 	void operator()(task_base* t)
 	{
-		static_cast<task_result<Result>*>(t)->set_result(invoke_fakevoid(std::move(*static_cast<func_type*>(this))));
+		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(*static_cast<func_type*>(this))));
 		t->finish();
 	}
 };
@@ -430,7 +430,7 @@ template<typename Parent, typename Result, typename Func, bool ValueCont, bool U
 	continuation_exec_func(Func&& f, Parent&& p): func_type(std::forward<Func>(f)), parent(std::forward<Parent>(p)) {}
 	void operator()(task_base* t)
 	{
-		static_cast<task_result<Result>*>(t)->set_result(invoke_fakevoid([this]{return invoke_fakevoid_param(std::move(*static_cast<func_type*>(this)), std::move(this->parent));}));
+		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(*static_cast<func_type*>(this)), std::move(this->parent)));
 		t->finish();
 	}
 	typename std::decay<Parent>::type parent;
@@ -441,7 +441,7 @@ template<typename Parent, typename Result, typename Func> struct continuation_ex
 	void operator()(task_base* t)
 	{
 		auto&& result = get_internal_task(parent)->get_result(parent);
-		static_cast<task_result<Result>*>(t)->set_result(invoke_fakevoid([this, &result]{return invoke_fakevoid_param(std::move(*static_cast<func_type*>(this)), std::forward<decltype(result)>(result));}));
+		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(*static_cast<func_type*>(this)), std::forward<decltype(result)>(result)));
 		t->finish();
 	}
 	typename std::decay<Parent>::type parent;
@@ -452,7 +452,7 @@ template<typename Parent, typename Result, typename Func> struct continuation_ex
 	void operator()(task_base* t)
 	{
 		typedef typename detail::void_to_fake_void<typename Parent::result_type>::type internal_result;
-		unwrapped_finish<internal_result, continuation_exec_func>(t, invoke_fakevoid_param(std::move(*static_cast<func_type*>(this)), std::move(parent)));
+		unwrapped_finish<internal_result, continuation_exec_func>(t, invoke_fake_void(std::move(*static_cast<func_type*>(this)), std::move(parent)));
 	}
 	typename std::decay<Parent>::type parent;
 };
@@ -463,7 +463,7 @@ template<typename Parent, typename Result, typename Func> struct continuation_ex
 	{
 		auto&& result = get_internal_task(parent)->get_result(parent);
 		typedef typename detail::void_to_fake_void<typename Parent::result_type>::type internal_result;
-		unwrapped_finish<internal_result, continuation_exec_func>(t, invoke_fakevoid_param(std::move(*static_cast<func_type*>(this)), std::forward<decltype(result)>(result)));
+		unwrapped_finish<internal_result, continuation_exec_func>(t, invoke_fake_void(std::move(*static_cast<func_type*>(this)), std::forward<decltype(result)>(result)));
 	}
 	typename std::decay<Parent>::type parent;
 };
