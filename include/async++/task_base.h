@@ -33,6 +33,13 @@ enum class task_state: unsigned char {
 	TASK_CANCELED // Task has been canceled and an exception is available
 };
 
+// Operations for dispatch function
+enum class dispatch_op {
+	execute,
+	cancel_hook,
+	destroy
+};
+
 // Continuation vector optimized for single continuations. Only supports a
 // minimal set of operations.
 class continuation_vector {
@@ -135,12 +142,17 @@ struct task_base: public ref_count_base<task_base> {
 	// Exception associated with the task if it was canceled
 	std::exception_ptr except;
 
-	// Virtual destructor so result gets destroyed properly
-	virtual ~task_base() {}
+	// Dispatch function with 3 operations:
+	// - Run the task function
+	// - Free the task function when canceling
+	// - Destroy the task function and result
+	void (*dispatch)(task_base*, dispatch_op);
 
-	// Execution function called by the task scheduler. A default implementation
-	// is provided for event_task.
-	virtual void execute() {}
+	// Destroy task function and result in destructor
+	~task_base()
+	{
+		dispatch(this, dispatch_op::destroy);
+	}
 
 	// Run a single continuation
 	void run_continuation(task_ptr&& cont, bool cancel)
@@ -194,9 +206,14 @@ struct task_base: public ref_count_base<task_base> {
 		run_continuation(std::move(cont), current_state == task_state::TASK_CANCELED);
 	}
 
-	// Cancel the task with an exception. This function is virtual so that
-	// the associated function object can be freed (it is not needed anymore).
-	virtual void cancel(std::exception_ptr cancel_exception)
+	// Cancel the task with an exception
+	void cancel(std::exception_ptr cancel_exception)
+	{
+		// Destroy the function object in the task before cancelling
+		dispatch(this, dispatch_op::cancel_hook);
+		cancel_base(std::move(cancel_exception));
+	}
+	void cancel_base(std::exception_ptr cancel_exception)
 	{
 		except = std::move(cancel_exception);
 		state.store(task_state::TASK_CANCELED, std::memory_order_release);
@@ -238,6 +255,12 @@ struct task_base: public ref_count_base<task_base> {
 template<typename Result> struct task_result: public task_base {
 	typename std::aligned_storage<sizeof(Result), std::alignment_of<Result>::value>::type result;
 
+	// Set the dispatch function
+	task_result()
+	{
+		dispatch = cleanup;
+	}
+
 	template<typename T> void set_result(T&& t)
 	{
 		new(&result) Result(std::forward<T>(t));
@@ -254,11 +277,16 @@ template<typename Result> struct task_result: public task_base {
 		return *reinterpret_cast<Result*>(&result);
 	}
 
-	virtual ~task_result()
+	// Result-specific dispatch function
+	static void cleanup(task_base* t, dispatch_op op)
 	{
-		// Result is only present if the task completed successfully
-		if (state.load(std::memory_order_relaxed) == task_state::TASK_COMPLETED)
-			reinterpret_cast<Result*>(&result)->~Result();
+		// Only need to handle destruction here
+		if (op == dispatch_op::destroy) {
+			// Result is only present if the task completed successfully
+			task_result* current_task = static_cast<task_result*>(t);
+			if (current_task->state.load(std::memory_order_relaxed) == task_state::TASK_COMPLETED)
+				reinterpret_cast<Result*>(&current_task->result)->~Result();
+		}
 	}
 };
 
@@ -266,6 +294,12 @@ template<typename Result> struct task_result: public task_base {
 template<typename Result> struct task_result<Result&>: public task_base {
 	// Store as pointer internally
 	Result* result;
+
+	// Set the dispatch function
+	task_result()
+	{
+		dispatch = cleanup;
+	}
 
 	void set_result(Result& obj)
 	{
@@ -280,11 +314,20 @@ template<typename Result> struct task_result<Result&>: public task_base {
 	{
 		return *result;
 	}
+
+	// No cleanup required for references
+	static void cleanup(task_base*, dispatch_op) {}
 };
 
 // Specialization for void
 template<> struct task_result<fake_void>: public task_base {
 	void set_result(fake_void) {}
+
+	// Set the dispatch function
+	task_result()
+	{
+		dispatch = cleanup;
+	}
 
 	// Get the result as fake_void so that it can be passed to set_result and
 	// continuations
@@ -296,6 +339,9 @@ template<> struct task_result<fake_void>: public task_base {
 	{
 		return fake_void();
 	}
+
+	// No cleanup required for void
+	static void cleanup(task_base*, dispatch_op) {}
 };
 
 // Class to hold a function object and initialize/destroy it
@@ -338,32 +384,53 @@ template<typename Func, typename Result> struct task_func: public task_result<Re
 	explicit task_func(Func&& f)
 	{
 		this->init_func(std::move(f));
+		this->dispatch = dispatch_func;
 	}
 
-	// Execution function called by the scheduler
-	virtual void execute() override final
+	// Dispatch function
+	static void dispatch_func(task_base* t, dispatch_op op)
 	{
-		try {
-			// Dispatch to execution function
-			this->get_func()(this);
+		task_func* current_task = static_cast<task_func*>(t);
+		switch (op) {
+		case dispatch_op::execute:
+			try {
+				// Dispatch to execution function
+				current_task->get_func()(current_task);
 
-			// If we successfully ran, destroy the function object so that it
-			// can release any references (shared_ptr) it holds. Behaviour is
-			// undefined if the destructor throws.
-			this->destroy_func();
-		} catch (task_canceled) {
-			// Optimize task_canceled by encoding it as a null exception_ptr
-			cancel(nullptr);
-		} catch (...) {
-			cancel(std::current_exception());
+				// If we successfully ran, destroy the function object so that it
+				// can release any references (shared_ptr) it holds.
+				current_task->destroy_func();
+			} catch (task_canceled) {
+				// Optimize task_canceled by encoding it as a null exception_ptr
+				current_task->destroy_func();
+				current_task->cancel_base(nullptr);
+			} catch (...) {
+				current_task->destroy_func();
+				current_task->cancel_base(std::current_exception());
+			}
+			break;
+
+		case dispatch_op::cancel_hook:
+			// Destroy the function object when cancelling since it won't be
+			// used anymore.
+			current_task->destroy_func();
+			break;
+
+		case dispatch_op::destroy:
+			// If the task hasn't completed yet, destroy the function object.
+			if (current_task->state.load(std::memory_order_relaxed) < task_state::TASK_COMPLETED)
+				current_task->destroy_func();
+
+			// Then destroy the result
+			task_result<Result>::cleanup(t, dispatch_op::destroy);
 		}
 	}
 
-	// Destroy the function when being canceled
-	virtual void cancel(std::exception_ptr cancel_exception) override final
+	// Overriden cancel which avoid dynamic dispatch overhead
+	void cancel(std::exception_ptr cancel_exception)
 	{
 		this->destroy_func();
-		task_base::cancel(std::move(cancel_exception));
+		this->cancel_base(std::move(cancel_exception));
 	}
 };
 

@@ -46,7 +46,7 @@ public:
 	// Run the task and release the handle
 	void run()
 	{
-		handle->execute();
+		handle->dispatch(handle.get(), detail::dispatch_op::execute);
 		handle = nullptr;
 	}
 

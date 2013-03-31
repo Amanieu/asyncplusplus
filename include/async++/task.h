@@ -180,7 +180,7 @@ public:
 			return false;
 
 		// Cancel the task
-		internal_task->task_base::cancel(std::move(except));
+		internal_task->cancel_base(std::move(except));
 		return true;
 	}
 
