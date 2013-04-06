@@ -31,7 +31,7 @@ template<typename T> struct when_all_state_range: public ref_count_base<when_all
 	task_type results;
 	event_task<task_type> event;
 
-	when_all_state_range(int count)
+	when_all_state_range(size_t count)
 		: ref_count_base<when_all_state_range<T>>(count), results(count) {}
 
 	// When all references are dropped, signal the event
@@ -40,7 +40,7 @@ template<typename T> struct when_all_state_range: public ref_count_base<when_all
 		event.set(std::move(results));
 	}
 
-	template<typename U> void set(int i, U&& u)
+	template<typename U> void set(size_t i, U&& u)
 	{
 		results[i] = std::forward<U>(u);
 	}
@@ -54,7 +54,7 @@ template<> struct when_all_state_range<void>: public ref_count_base<when_all_sta
 	typedef void task_type;
 	event_task<void> event;
 
-	when_all_state_range(int count)
+	when_all_state_range(size_t count)
 		: ref_count_base(count) {}
 
 	// When all references are dropped, signal the event
@@ -63,7 +63,7 @@ template<> struct when_all_state_range<void>: public ref_count_base<when_all_sta
 		event.set();
 	}
 
-	void set(int, fake_void) {}
+	void set(size_t, fake_void) {}
 
 	static task<task_type> empty_range()
 	{
@@ -103,7 +103,7 @@ template<> struct when_any_state<void>: public ref_count_base<when_any_state<voi
 	typedef size_t task_type;
 	event_task<task_type> event;
 
-	when_any_state(int count)
+	when_any_state(size_t count)
 		: ref_count_base(count) {}
 
 	void set(size_t i, fake_void)

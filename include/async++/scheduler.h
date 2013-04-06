@@ -40,7 +40,7 @@ public:
 
 	explicit operator bool() const
 	{
-		return static_cast<bool>(handle);
+		return bool(handle);
 	}
 
 	// Run the task and release the handle

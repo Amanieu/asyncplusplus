@@ -27,6 +27,8 @@ namespace detail {
 
 // Spinlock with same interface as std::mutex
 class spinlock {
+	std::atomic<bool> locked{false};
+
 public:
 	// Non-copyable and non-movable
 	spinlock() = default;
@@ -65,9 +67,6 @@ public:
 		_mm_pause();
 #endif
 	}
-
-private:
-	std::atomic<bool> locked{false};
 };
 
 } // namespace detail

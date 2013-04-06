@@ -23,6 +23,11 @@ namespace detail {
 
 // Queue used to hold tasks from outside the thread pool, in FIFO order
 class fifo_queue {
+	size_t length;
+	std::unique_ptr<task_handle[]> items;
+	spinlock lock;
+	size_t head{0}, tail{0};
+
 public:
 	fifo_queue()
 		: length(32), items(new task_handle[32]) {}
@@ -60,12 +65,6 @@ public:
 			return task;
 		}
 	}
-
-private:
-	size_t length;
-	std::unique_ptr<task_handle[]> items;
-	spinlock lock;
-	size_t head{0}, tail{0};
 };
 
 } // namespace detail

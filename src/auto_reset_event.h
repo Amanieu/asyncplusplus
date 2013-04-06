@@ -38,6 +38,12 @@ namespace detail {
 #ifdef __linux__
 // Linux-specific implementation using futex
 class auto_reset_event {
+	// Valid values:
+	// 1 = set
+	// 0 = not set
+	// -1 = not set and sleeping thread
+	std::atomic<int> futex_val{0};
+
 public:
 	void wait()
 	{
@@ -73,17 +79,14 @@ public:
 		if (val < 0)
 			syscall(SYS_futex, reinterpret_cast<int*>(&futex_val), FUTEX_WAKE_PRIVATE, 1);
 	}
-
-private:
-	// Valid values:
-	// 1 = set
-	// 0 = not set
-	// -1 = not set and sleeping thread
-	std::atomic<int> futex_val{0};
 };
 #else
 // Generic implementation using std::mutex and std::condition_variable
 class auto_reset_event {
+	std::mutex m;
+	std::condition_variable c;
+	bool signaled{false};
+
 public:
 	void wait()
 	{
@@ -104,11 +107,6 @@ public:
 		signaled = true;
 		c.notify_one();
 	}
-
-private:
-	std::mutex m;
-	std::condition_variable c;
-	bool signaled{false};
 };
 #endif
 

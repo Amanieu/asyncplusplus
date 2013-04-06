@@ -27,6 +27,11 @@ namespace detail {
 // themselves into smaller tasks, this allows larger chunks of work to be
 // stolen.
 class work_steal_queue {
+	size_t length;
+	std::unique_ptr<task_handle[]> items;
+	spinlock lock;
+	std::atomic<size_t> atomic_head{0}, atomic_tail{0};
+
 public:
 	work_steal_queue()
 		: length(32), items(new task_handle[32]) {}
@@ -112,12 +117,6 @@ public:
 		atomic_head.store(head, std::memory_order_relaxed);
 		return task_handle();
 	}
-
-private:
-	size_t length;
-	std::unique_ptr<task_handle[]> items;
-	spinlock lock;
-	std::atomic<size_t> atomic_head{0}, atomic_tail{0};
 };
 
 } // namespace detail

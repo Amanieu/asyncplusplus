@@ -43,6 +43,22 @@ enum class dispatch_op {
 // Continuation vector optimized for single continuations. Only supports a
 // minimal set of operations.
 class continuation_vector {
+	size_t count{0};
+
+	union data_union {
+		data_union(): inline_data() {}
+
+		// Destruction is handled by the parent class
+		~data_union() {}
+
+		// Inline continuation used for common case (only one continuation)
+		task_ptr inline_data;
+
+		// Vector of continuations. The capacity is the lowest power of 2
+		// which is >= count.
+		std::unique_ptr<task_ptr[]> vector_data;
+	} data;
+
 public:
 	task_ptr* begin()
 	{
@@ -105,23 +121,6 @@ public:
 		else
 			data.inline_data.~task_ptr();
 	}
-
-private:
-	size_t count{0};
-
-	union data_union {
-		data_union(): inline_data() {}
-
-		// Destruction is handled by the parent class
-		~data_union() {}
-
-		// Inline continuation used for common case (only one continuation)
-		task_ptr inline_data;
-
-		// Vector of continuations. The capacity is the lowest power of 2
-		// which is >= count.
-		std::unique_ptr<task_ptr[]> vector_data;
-	} data;
 };
 
 // Type-generic base task object
@@ -213,6 +212,9 @@ struct task_base: public ref_count_base<task_base> {
 		dispatch(this, dispatch_op::cancel_hook);
 		cancel_base(std::move(cancel_exception));
 	}
+
+	// Cancel function to be used for tasks which don't have an associated
+	// function object (event_task).
 	void cancel_base(std::exception_ptr cancel_exception)
 	{
 		except = std::move(cancel_exception);
@@ -402,11 +404,9 @@ template<typename Func, typename Result> struct task_func: public task_result<Re
 				current_task->destroy_func();
 			} catch (task_canceled) {
 				// Optimize task_canceled by encoding it as a null exception_ptr
-				current_task->destroy_func();
-				current_task->cancel_base(nullptr);
+				current_task->cancel(nullptr);
 			} catch (...) {
-				current_task->destroy_func();
-				current_task->cancel_base(std::current_exception());
+				current_task->cancel(std::current_exception());
 			}
 			break;
 

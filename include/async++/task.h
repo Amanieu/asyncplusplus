@@ -41,36 +41,6 @@ protected:
 	template<typename T> friend class basic_task;
 	template<typename T> friend typename T::internal_task_type* get_internal_task(const T& t);
 
-public:
-	// Task result type
-	typedef Result result_type;
-
-	explicit operator bool() const
-	{
-		return internal_task;
-	}
-
-	// Query whether the task has finished executing
-	bool ready() const
-	{
-		if (internal_task->state.load(std::memory_order_relaxed) >= task_state::TASK_COMPLETED) {
-			std::atomic_thread_fence(std::memory_order_acquire);
-			return true;
-		} else
-			return false;
-	}
-
-	// Wait for the task to complete
-	void wait() const
-	{
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			throw std::invalid_argument("Use of empty task object");
-
-		internal_task->wait();
-	}
-
-protected:
 	// Common code for get()
 	void get_internal() const
 	{
@@ -109,6 +79,35 @@ protected:
 
 		return cont;
 	}
+
+public:
+	// Task result type
+	typedef Result result_type;
+
+	explicit operator bool() const
+	{
+		return internal_task;
+	}
+
+	// Query whether the task has finished executing
+	bool ready() const
+	{
+		if (internal_task->state.load(std::memory_order_relaxed) >= task_state::TASK_COMPLETED) {
+			std::atomic_thread_fence(std::memory_order_acquire);
+			return true;
+		} else
+			return false;
+	}
+
+	// Wait for the task to complete
+	void wait() const
+	{
+		// Catch use of uninitialized task objects
+		if (!internal_task)
+			throw std::invalid_argument("Use of empty task object");
+
+		internal_task->wait();
+	}
 };
 
 // Common code for event_task specializations
@@ -122,6 +121,31 @@ protected:
 
 	// Type-specific task object
 	typedef detail::task_result<internal_result> internal_task_type;
+
+	// Common code for set()
+	template<typename T> bool set_internal(T&& result) const
+	{
+		// Catch use of uninitialized task objects
+		if (!internal_task)
+			throw std::invalid_argument("Use of empty event_task object");
+
+		// Only allow setting the value once
+		detail::task_state expected = detail::task_state::TASK_PENDING;
+		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_relaxed, std::memory_order_relaxed))
+			return false;
+
+		try {
+			// Store the result and finish
+			static_cast<internal_task_type*>(internal_task.get())->set_result(std::forward<T>(result));
+			internal_task->finish();
+		} catch (...) {
+			// If the copy/move constructor of the result threw, save the exception.
+			// We could also return the exception to the caller, but this would
+			// cause race conditions.
+			internal_task->cancel(std::current_exception());
+		}
+		return true;
+	}
 
 public:
 	// Movable but not copyable
@@ -188,32 +212,6 @@ public:
 	bool cancel() const
 	{
 		return set_exception(nullptr);
-	}
-
-protected:
-	// Common code for set()
-	template<typename T> bool set_internal(T&& result) const
-	{
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			throw std::invalid_argument("Use of empty event_task object");
-
-		// Only allow setting the value once
-		detail::task_state expected = detail::task_state::TASK_PENDING;
-		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_relaxed, std::memory_order_relaxed))
-			return false;
-
-		try {
-			// Store the result and finish
-			static_cast<internal_task_type*>(internal_task.get())->set_result(std::forward<T>(result));
-			internal_task->finish();
-		} catch (...) {
-			// If the copy/move constructor of the result threw, save the exception.
-			// We could also return the exception to the caller, but this would
-			// cause race conditions.
-			internal_task->cancel(std::current_exception());
-		}
-		return true;
 	}
 };
 
