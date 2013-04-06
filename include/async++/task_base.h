@@ -43,7 +43,7 @@ enum class dispatch_op {
 // Continuation vector optimized for single continuations. Only supports a
 // minimal set of operations.
 class continuation_vector {
-	size_t count{0};
+	std::size_t count{0};
 
 	union data_union {
 		data_union(): inline_data() {}
@@ -109,7 +109,7 @@ public:
 		count = 0;
 	}
 
-	size_t size() const
+	std::size_t size() const
 	{
 		return count;
 	}

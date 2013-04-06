@@ -31,7 +31,7 @@ template<typename T> struct when_all_state_range: public ref_count_base<when_all
 	task_type results;
 	event_task<task_type> event;
 
-	when_all_state_range(size_t count)
+	when_all_state_range(std::size_t count)
 		: ref_count_base<when_all_state_range<T>>(count), results(count) {}
 
 	// When all references are dropped, signal the event
@@ -40,7 +40,7 @@ template<typename T> struct when_all_state_range: public ref_count_base<when_all
 		event.set(std::move(results));
 	}
 
-	template<typename U> void set(size_t i, U&& u)
+	template<typename U> void set(std::size_t i, U&& u)
 	{
 		results[i] = std::forward<U>(u);
 	}
@@ -54,7 +54,7 @@ template<> struct when_all_state_range<void>: public ref_count_base<when_all_sta
 	typedef void task_type;
 	event_task<void> event;
 
-	when_all_state_range(size_t count)
+	when_all_state_range(std::size_t count)
 		: ref_count_base(count) {}
 
 	// When all references are dropped, signal the event
@@ -63,7 +63,7 @@ template<> struct when_all_state_range<void>: public ref_count_base<when_all_sta
 		event.set();
 	}
 
-	void set(size_t, fake_void) {}
+	void set(std::size_t, fake_void) {}
 
 	static task<task_type> empty_range()
 	{
@@ -88,25 +88,25 @@ template<typename Tuple> struct when_all_state_variadic: public ref_count_base<w
 
 // when_any shared state
 template<typename T> struct when_any_state: public ref_count_base<when_any_state<T>> {
-	typedef std::pair<size_t, T> task_type;
+	typedef std::pair<std::size_t, T> task_type;
 	event_task<task_type> event;
 
 	when_any_state(int count)
 		: ref_count_base<when_any_state<T>>(count) {}
 
-	template<typename U> void set(size_t i, U&& u)
+	template<typename U> void set(std::size_t i, U&& u)
 	{
 		event.set(std::make_pair(i, std::forward<U>(u)));
 	}
 };
 template<> struct when_any_state<void>: public ref_count_base<when_any_state<void>> {
-	typedef size_t task_type;
+	typedef std::size_t task_type;
 	event_task<task_type> event;
 
-	when_any_state(size_t count)
+	when_any_state(std::size_t count)
 		: ref_count_base(count) {}
 
-	void set(size_t i, fake_void)
+	void set(std::size_t i, fake_void)
 	{
 		event.set(i);
 	}
@@ -189,7 +189,7 @@ template<typename Iter> task<typename detail::when_all_state_range<typename std:
 
 	// Add a continuation to each task to add its result to the shared state
 	// Last task sets the event result
-	for (size_t i = 0; begin != end; i++, ++begin) {
+	for (std::size_t i = 0; begin != end; i++, ++begin) {
 		try {
 			(*begin).then(inline_scheduler(), [state_ptr, i](task_type t) {
 				detail::ref_count_ptr<detail::when_all_state_range<result_type>> state(state_ptr);
@@ -228,7 +228,7 @@ template<typename Iter> task<typename detail::when_any_state<typename std::itera
 	auto out = state_ptr->event.get_task();
 
 	// Add a continuation to each task to set the event. First one wins.
-	for (size_t i = 0; begin != end; i++, ++begin) {
+	for (std::size_t i = 0; begin != end; i++, ++begin) {
 		try {
 			(*begin).then(inline_scheduler(), [state_ptr, i](task_type t) {
 				detail::ref_count_ptr<detail::when_any_state<result_type>> state(state_ptr);

@@ -32,7 +32,7 @@ namespace async {
 namespace detail {
 
 // Allocate an aligned block of memory
-inline void* aligned_alloc(size_t size, size_t align)
+inline void* aligned_alloc(std::size_t size, std::size_t align)
 {
 #ifdef _WIN32
 	void* ptr = _aligned_malloc(size, align);

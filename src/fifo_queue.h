@@ -23,10 +23,10 @@ namespace detail {
 
 // Queue used to hold tasks from outside the thread pool, in FIFO order
 class fifo_queue {
-	size_t length;
+	std::size_t length;
 	std::unique_ptr<task_handle[]> items;
 	spinlock lock;
-	size_t head{0}, tail{0};
+	std::size_t head{0}, tail{0};
 
 public:
 	fifo_queue()
@@ -41,7 +41,7 @@ public:
 		if (head == ((tail + 1) & (length - 1))) {
 			length *= 2;
 			std::unique_ptr<task_handle[]> ptr(new task_handle[length]);
-			for (size_t i = 0; i < tail - head; i++)
+			for (std::size_t i = 0; i < tail - head; i++)
 				ptr[i] = std::move(items[(i + head) & (length - 1)]);
 			items = std::move(ptr);
 		}

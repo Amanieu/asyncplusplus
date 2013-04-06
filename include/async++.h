@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <exception>
 #include <memory>
 #include <mutex>

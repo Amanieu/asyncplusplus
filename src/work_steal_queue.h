@@ -27,10 +27,10 @@ namespace detail {
 // themselves into smaller tasks, this allows larger chunks of work to be
 // stolen.
 class work_steal_queue {
-	size_t length;
+	std::size_t length;
 	std::unique_ptr<task_handle[]> items;
 	spinlock lock;
-	std::atomic<size_t> atomic_head{0}, atomic_tail{0};
+	std::atomic<std::size_t> atomic_head{0}, atomic_tail{0};
 
 public:
 	work_steal_queue()
@@ -39,13 +39,13 @@ public:
 	// Push a task to the tail of this thread's queue
 	void push(task_handle t)
 	{
-		size_t tail = atomic_tail.load(std::memory_order_relaxed);
+		std::size_t tail = atomic_tail.load(std::memory_order_relaxed);
 
 		// Check if we have space to insert an element at the tail
 		if (tail == length) {
 			// Lock the queue
 			std::lock_guard<spinlock> locked(lock);
-			size_t head = atomic_head.load(std::memory_order_relaxed);
+			std::size_t head = atomic_head.load(std::memory_order_relaxed);
 
 			// Resize the queue if it is more than 75% full
 			if (head <= length / 4) {
@@ -69,7 +69,7 @@ public:
 	// Pop a task from the tail of this thread's queue
 	task_handle pop()
 	{
-		size_t tail = atomic_tail.load(std::memory_order_relaxed);
+		std::size_t tail = atomic_tail.load(std::memory_order_relaxed);
 
 		// Early exit if queue is empty
 		if (atomic_head.load(std::memory_order_relaxed) >= tail)
@@ -102,7 +102,7 @@ public:
 		std::lock_guard<spinlock> locked(lock);
 
 		// Make sure head is stored before we read tail
-		size_t head = atomic_head.load(std::memory_order_relaxed);
+		std::size_t head = atomic_head.load(std::memory_order_relaxed);
 		atomic_head.store(head + 1, std::memory_order_relaxed);
 		std::atomic_thread_fence(std::memory_order_seq_cst);
 
