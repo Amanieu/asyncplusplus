@@ -142,7 +142,7 @@ protected:
 			// If the copy/move constructor of the result threw, save the exception.
 			// We could also return the exception to the caller, but this would
 			// cause race conditions.
-			internal_task->cancel(std::current_exception());
+			internal_task->cancel_base(std::current_exception());
 		}
 		return true;
 	}
