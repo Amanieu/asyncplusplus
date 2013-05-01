@@ -66,7 +66,7 @@ protected:
 		typedef typename continuation_traits<Parent, Func>::task_type::internal_result cont_internal_result;
 		typedef continuation_exec_func<typename std::decay<Parent>::type, cont_internal_result, typename std::decay<Func>::type, continuation_traits<Parent, Func>::is_value_cont::value, is_task<typename continuation_traits<Parent, Func>::result_type>::value> exec_func;
 		typename continuation_traits<Parent, Func>::task_type cont;
-		cont.internal_task = task_ptr(new task_func<exec_func, cont_internal_result>(exec_func(std::forward<Func>(f), std::forward<Parent>(parent))));
+		cont.internal_task = task_ptr(new task_func<exec_func, cont_internal_result>(std::forward<Func>(f), std::forward<Parent>(parent)));
 
 		// Set continuation parameters
 		cont.internal_task->sched = std::addressof(sched);
@@ -439,7 +439,7 @@ task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn
 	typedef typename detail::void_to_fake_void<typename detail::remove_task<decltype(std::declval<Func>()())>::type>::type internal_result;
 	typedef detail::root_exec_func<internal_result, typename std::decay<Func>::type, detail::is_task<decltype(std::declval<Func>()())>::value> exec_func;
 	task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> out;
-	out.internal_task = detail::task_ptr(new detail::task_func<exec_func, internal_result>(exec_func(std::forward<Func>(f))));
+	out.internal_task = detail::task_ptr(new detail::task_func<exec_func, internal_result>(std::forward<Func>(f)));
 
 	// Avoid an expensive ref-count modification since the task isn't shared yet
 	out.internal_task->add_ref_unlocked();
