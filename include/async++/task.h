@@ -88,9 +88,10 @@ public:
 	// Task result type
 	typedef Result result_type;
 
-	explicit operator bool() const
+	// Check if this task is not empty
+	bool valid() const
 	{
-		return internal_task;
+		return bool(internal_task);
 	}
 
 	// Query whether the task has finished executing
@@ -179,6 +180,12 @@ public:
 		// This has no effect if a result is already set
 		if (internal_task)
 			cancel();
+	}
+
+	// Check if this task is not empty
+	bool valid() const
+	{
+		return bool(internal_task);
 	}
 
 	// Get a task linked to this event
