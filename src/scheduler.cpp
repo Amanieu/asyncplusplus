@@ -42,12 +42,12 @@
 # if __has_feature(cxx_thread_local)
 #  define HAVE_THREAD_LOCAL
 # endif
-#elif __GNUC__ * 100 + __GNUC_MINOR__ >= 408 && !defined(__MINGW32__)
+#elif __GNUC__ * 100 + __GNUC_MINOR__ >= 408
 # define HAVE_THREAD_LOCAL
 #endif
 
-// For compilers that don't support thread_local, work around using __thread
-// which has the same effect but doesn't support dynamic initialization.
+// For compilers that don't support thread_local, use __thread/declspec(thread)
+// which has the same semantics but doesn't support dynamic initialization/destruction.
 #ifndef HAVE_THREAD_LOCAL
 # ifdef _MSC_VER
 #  define thread_local __declspec(thread)
@@ -60,7 +60,7 @@
 #ifdef __GNUC__
 #define CACHELINE_ALIGN __attribute__((aligned(64)))
 #elif _MSC_VER
-#define CACHELINE_ALIGN __declspec(aligned(64))
+#define CACHELINE_ALIGN __declspec(align(64))
 #else
 #define CACHELINE_ALIGN alignas(64)
 #endif
@@ -79,6 +79,7 @@ struct CACHELINE_ALIGN thread_data_t {
 	work_steal_queue queue;
 	std::thread handle;
 	std::minstd_rand rng;
+	auto_reset_event event;
 };
 
 // Custom deleter for the per-thread data, since we can't use delete[]
@@ -104,33 +105,6 @@ static bool shutdown = false;
 // List of threads waiting for tasks to run
 static spinlock waiters_lock;
 static std::vector<auto_reset_event*> waiters;
-
-// List of currently active threads for thread_scheduler
-static spinlock threads_lock;
-static std::vector<std::thread> active_threads;
-
-// Get this thread's event. Note that there is an event for all threads,
-// even those not part of the thread pool.
-static auto_reset_event& get_thread_event()
-{
-	// Initialize on first use
-#ifdef HAVE_THREAD_LOCAL
-	static thread_local auto_reset_event thread_event;
-#else
-	// Work around lack of dynamic initialization for thread local storage
-	static thread_local bool thread_event_init = false;
-	static thread_local std::aligned_storage<sizeof(auto_reset_event), std::alignment_of<auto_reset_event>::value>::type thread_event_storage;
-	auto_reset_event& thread_event = reinterpret_cast<auto_reset_event&>(thread_event_storage);
-	if (!thread_event_init) {
-		new (&thread_event) auto_reset_event;
-		// There is no portable way to destroy the event at thread exit, so we
-		// let it leak. The fix is to use a compiler which supports thread_local.
-		thread_event_init = true;
-	}
-#endif
-
-	return thread_event;
-}
 
 // Register a thread on the waiter list
 static void register_waiter(auto_reset_event& thread_event)
@@ -181,7 +155,7 @@ static void worker_thread(int id)
 	thread_data[thread_id].rng.seed(thread_id);
 
 	// Get our thread's event
-	auto_reset_event& thread_event = get_thread_event();
+	auto_reset_event& thread_event = thread_data[thread_id].event;
 
 	// Main loop
 	while (true) {
@@ -323,7 +297,7 @@ void default_scheduler_impl::schedule(task_handle t)
 static void wait_for_task_internal(task_base* wait_task)
 {
 	// Get our thread's event
-	auto_reset_event& thread_event = get_thread_event();
+	auto_reset_event& thread_event = thread_data[thread_id].event;
 
 	// Flag indicating if we have added a continuation to the task
 	bool added_continuation = false;
@@ -398,12 +372,8 @@ static void wait_for_task_internal(task_base* wait_task)
 // Wait for a task to complete (for threads outside thread pool)
 static void wait_for_task_external(task_base* wait_task)
 {
-	// Get our thread's event
-	auto_reset_event& thread_event = get_thread_event();
-
-	// Reset the event here so that we can detect it getting set by the
-	// continuation.
-	thread_event.reset();
+	// Create an event to wait on
+	auto_reset_event thread_event;
 
 	// Create a continuation for the task we are waiting for
 	auto exec_func = [&thread_event](task_base*) {
