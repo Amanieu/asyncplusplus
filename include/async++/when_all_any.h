@@ -219,9 +219,11 @@ template<typename Iter> task<typename detail::when_any_state<typename std::itera
 	typedef typename std::iterator_traits<Iter>::value_type task_type;
 	typedef typename task_type::result_type result_type;
 
+#ifndef NDEBUG
 	// Handle empty range
 	if (begin == end)
 		throw std::invalid_argument("when_any called with empty range");
+#endif
 
 	// Create shared state
 	auto* state_ptr = new detail::when_any_state<result_type>(std::distance(begin, end));

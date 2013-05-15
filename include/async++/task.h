@@ -44,9 +44,11 @@ protected:
 	// Common code for get()
 	void get_internal() const
 	{
+#ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
 			throw std::invalid_argument("Use of empty task object");
+#endif
 
 		// If the task was canceled, throw the associated exception
 		internal_task->wait_and_throw();
@@ -55,9 +57,11 @@ protected:
 	// Common code for then()
 	template<typename Sched, typename Func, typename Parent> typename continuation_traits<Parent, Func>::task_type then_internal(Sched& sched, Func&& f, Parent&& parent) const
 	{
+#ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
 			throw std::invalid_argument("Use of empty task object");
+#endif
 
 		// Save a copy of internal_task because it might get moved into exec_func
 		task_base* my_internal = internal_task.get();
@@ -102,9 +106,11 @@ public:
 	// Wait for the task to complete
 	void wait() const
 	{
+#ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
 			throw std::invalid_argument("Use of empty task object");
+#endif
 
 		internal_task->wait();
 	}
@@ -125,9 +131,11 @@ protected:
 	// Common code for set()
 	template<typename T> bool set_internal(T&& result) const
 	{
+#ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
 			throw std::invalid_argument("Use of empty event_task object");
+#endif
 
 		// Only allow setting the value once
 		detail::task_state expected = detail::task_state::TASK_PENDING;
@@ -176,9 +184,11 @@ public:
 	// Get a task linked to this event
 	task<Result> get_task() const
 	{
+#ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
 			throw std::invalid_argument("Use of empty event_task object");
+#endif
 
 		// Make sure this is only called once (ref_count == 1)
 		unsigned int expected = 1;
@@ -194,9 +204,11 @@ public:
 	// Cancel the event with an exception and cancel continuations
 	bool set_exception(std::exception_ptr except) const
 	{
+#ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
 			throw std::invalid_argument("Use of empty event_task object");
+#endif
 
 		// Only allow setting the value once
 		detail::task_state expected = detail::task_state::TASK_PENDING;
