@@ -139,7 +139,7 @@ protected:
 
 		// Only allow setting the value once
 		detail::task_state expected = detail::task_state::TASK_PENDING;
-		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_relaxed, std::memory_order_relaxed))
+		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_acquire, std::memory_order_relaxed))
 			return false;
 
 		try {
@@ -212,7 +212,7 @@ public:
 
 		// Only allow setting the value once
 		detail::task_state expected = detail::task_state::TASK_PENDING;
-		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_relaxed, std::memory_order_relaxed))
+		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_acquire, std::memory_order_relaxed))
 			return false;
 
 		// Cancel the task
