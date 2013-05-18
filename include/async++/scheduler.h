@@ -25,114 +25,6 @@
 namespace async {
 
 // Task handle used by a wait handler
-class task_wait_handle;
-
-// Wait handler function prototype
-typedef void (*wait_handler)(task_wait_handle t);
-
-// Set a wait handler to control what a task does when it has "free time", which
-// is when it is waiting for another task to complete. The wait handler can do
-// other work, but should return when it detects that the task has completed.
-// The previously installed handler is returned.
-LIBASYNC_EXPORT wait_handler set_thread_wait_handler(wait_handler w);
-
-// Task handle used in scheduler, acts as a unique_ptr to a task object
-class task_run_handle {
-	detail::task_ptr handle;
-
-	// Allow construction in schedule_task()
-	template<typename Sched> friend void detail::schedule_task(Sched& sched, detail::task_ptr t);
-	explicit task_run_handle(detail::task_ptr t)
-		: handle(std::move(t)) {}
-
-public:
-	task_run_handle(const task_run_handle&) = delete;
-	task_run_handle(task_run_handle&&) = default;
-	task_run_handle& operator=(const task_run_handle&) = delete;
-	task_run_handle& operator=(task_run_handle&&) = default;
-
-	// Run the task and release the handle
-	void run()
-	{
-		handle->dispatch(handle.get(), detail::dispatch_op::execute);
-		handle = nullptr;
-	}
-
-	// Run the task but run the given wait handler when waiting for a task,
-	// instead of just sleeping.
-	void run_with_wait_handler(wait_handler handler)
-	{
-		wait_handler old = set_thread_wait_handler(handler);
-		run();
-		set_thread_wait_handler(old);
-	}
-
-	// Conversion to and from void pointer. This allows the task handle to be
-	// sent through C APIs which don't preserve types.
-	void* to_void_ptr()
-	{
-		return handle.release();
-	}
-	static task_run_handle from_void_ptr(void* ptr)
-	{
-		return task_run_handle(detail::task_ptr(static_cast<detail::task_base*>(ptr)));
-	}
-};
-
-// Scheduler interface
-class scheduler {
-public:
-	// Schedule a task for execution. Failure can be indicated by throwing, but
-	// then the task must not be executed.
-	virtual void schedule(task_run_handle t) = 0;
-};
-
-namespace detail {
-
-// Scheduler implementations
-class threadpool_scheduler_impl: public scheduler {
-public:
-	threadpool_scheduler_impl();
-	~threadpool_scheduler_impl();
-	LIBASYNC_EXPORT virtual void schedule(task_run_handle t) override final;
-};
-class inline_scheduler_impl: public scheduler {
-public:
-	virtual void schedule(task_run_handle t) override final
-	{
-		t.run();
-	}
-};
-class thread_scheduler_impl: public scheduler {
-public:
-	virtual void schedule(task_run_handle t) override final
-	{
-		std::thread([](task_run_handle t) {
-			t.run();
-		}, std::move(t));
-	}
-};
-
-// Schedule a task for execution using its scheduler
-template<typename Sched> void schedule_task(Sched& sched, task_ptr t)
-{
-	sched.schedule(task_run_handle(std::move(t)));
-}
-
-} // namespace detail
-
-inline detail::inline_scheduler_impl& inline_scheduler()
-{
-	static detail::inline_scheduler_impl sched;
-	return sched;
-}
-
-inline detail::thread_scheduler_impl& thread_scheduler()
-{
-	static detail::thread_scheduler_impl sched;
-	return sched;
-}
-
 class task_wait_handle {
 	detail::task_base* handle;
 
@@ -178,4 +70,56 @@ public:
 	}
 };
 
+// Task handle used in scheduler, acts as a unique_ptr to a task object
+class task_run_handle {
+	detail::task_ptr handle;
+
+	// Allow construction in schedule_task()
+	friend void detail::schedule_task(scheduler& sched, detail::task_ptr t);
+	explicit task_run_handle(detail::task_ptr t)
+		: handle(std::move(t)) {}
+
+public:
+	task_run_handle(const task_run_handle&) = delete;
+	task_run_handle(task_run_handle&&) = default;
+	task_run_handle& operator=(const task_run_handle&) = delete;
+	task_run_handle& operator=(task_run_handle&&) = default;
+
+	// Run the task and release the handle
+	void run()
+	{
+		handle->dispatch(handle.get(), detail::dispatch_op::execute);
+		handle = nullptr;
+	}
+
+	// Run the task but run the given wait handler when waiting for a task,
+	// instead of just sleeping.
+	void run_with_wait_handler(wait_handler handler)
+	{
+		wait_handler old = set_thread_wait_handler(handler);
+		run();
+		set_thread_wait_handler(old);
+	}
+
+	// Conversion to and from void pointer. This allows the task handle to be
+	// sent through C APIs which don't preserve types.
+	void* to_void_ptr()
+	{
+		return handle.release();
+	}
+	static task_run_handle from_void_ptr(void* ptr)
+	{
+		return task_run_handle(detail::task_ptr(static_cast<detail::task_base*>(ptr)));
+	}
+};
+
+namespace detail {
+
+// Schedule a task for execution using its scheduler
+void schedule_task(scheduler& sched, task_ptr t)
+{
+	sched.schedule(task_run_handle(std::move(t)));
+}
+
+} // namespace detail
 } // namespace async

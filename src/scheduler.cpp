@@ -97,7 +97,7 @@ struct thread_data_deleter {
 static std::unique_ptr<thread_data_t[], thread_data_deleter> thread_data;
 
 // Global queue for tasks from outside the pool
-static CACHELINE_ALIGN fifo_queue public_queue;
+static std::unique_ptr<fifo_queue> public_queue;
 
 // Shutdown request indicator
 static bool shutdown = false;
@@ -168,7 +168,7 @@ static void threadpool_wait_handler(task_wait_handle wait_task)
 
 		while (true) {
 			// Try to fetch from the public queue
-			if (void* t = public_queue.pop()) {
+			if (void* t = public_queue->pop()) {
 				task_run_handle::from_void_ptr(t).run();
 				break;
 			}
@@ -245,7 +245,7 @@ static void worker_thread(int id)
 		// Stealing loop
 		while (true) {
 			// Try to fetch from the public queue
-			if (void* t = public_queue.pop()) {
+			if (void* t = public_queue->pop()) {
 				task_run_handle::from_void_ptr(t).run();
 				break;
 			}
@@ -277,98 +277,125 @@ static void worker_thread(int id)
 	}
 }
 
-// Initialize thread pool on first use
-threadpool_scheduler_impl::threadpool_scheduler_impl()
-{
-	// Get the requested number of threads from the environment
-	// If that fails, use the number of CPUs in the system
-	const char *s = std::getenv("LIBASYNC_NUM_THREADS");
-	num_threads = std::thread::hardware_concurrency();
-	try {
-		if (s)
-			num_threads = std::stoi(s);
-	} catch (...) {}
-
-	// Make sure thread count isn't something ridiculous
-	num_threads = std::max(num_threads, 1);
-
-	// Reserve space in the waiters list to avoid resizes while running
-	waiters.reserve(num_threads);
-
-	// Allocate per-thread data
-	thread_data.reset(static_cast<thread_data_t*>(aligned_alloc(sizeof(thread_data_t) * num_threads, std::alignment_of<thread_data_t>::value)));
-	for (int i = 0; i < num_threads; i++)
-		new (&thread_data[i]) thread_data_t;
-
-	// Start worker threads
-	for (int i = 0; i < num_threads; i++)
-		thread_data[i].handle = std::thread(worker_thread, i);
-}
-
-// Wait for all currently running tasks to finish
-threadpool_scheduler_impl::~threadpool_scheduler_impl()
-{
-	// Signal shutdown
-	shutdown = true;
-
-	// Wake up any sleeping threads
+// Thread pool scheduler implementation
+class threadpool_scheduler_impl: public scheduler {
+public:
+	// Initialize thread pool on first use
+	threadpool_scheduler_impl()
 	{
-		std::lock_guard<spinlock> lock(waiters_lock);
-		for (auto_reset_event* i: waiters)
-			i->signal();
-		waiters.clear();
+		// Get the requested number of threads from the environment
+		// If that fails, use the number of CPUs in the system
+		const char *s = std::getenv("LIBASYNC_NUM_THREADS");
+		num_threads = std::thread::hardware_concurrency();
+		try {
+			if (s)
+				num_threads = std::stoi(s);
+		} catch (...) {}
+
+		// Make sure thread count isn't something ridiculous
+		num_threads = std::max(num_threads, 1);
+
+		// Reserve space in the waiters list to avoid resizes while running
+		waiters.reserve(num_threads);
+
+		// Allocate public queue
+		public_queue.reset(new fifo_queue);
+
+		// Allocate per-thread data
+		thread_data.reset(static_cast<thread_data_t*>(aligned_alloc(sizeof(thread_data_t) * num_threads, std::alignment_of<thread_data_t>::value)));
+		for (int i = 0; i < num_threads; i++)
+			new (&thread_data[i]) thread_data_t;
+
+		// Start worker threads
+		for (int i = 0; i < num_threads; i++)
+			thread_data[i].handle = std::thread(worker_thread, i);
 	}
 
-	// Wait for the threads to finish
-	for (int i = 0; i < num_threads; i++)
-		thread_data[i].handle.join();
-
-	// Flush the public queue
-	while (void* t = public_queue.pop())
-		task_run_handle::from_void_ptr(t).run();
-}
-
-// Schedule a task on the thread pool
-void threadpool_scheduler_impl::schedule(task_run_handle t)
-{
-	// If we have already shut down, just run the task inline
-	if (shutdown) {
-		t.run();
-		return;
-	}
-
-	// Check if we are in the thread pool
-	if (thread_id != -1) {
-		// Push task onto our task queue
-		thread_data[thread_id].queue.push(t.to_void_ptr());
-	} else {
-		// Push task onto the public queue
-		public_queue.push(t.to_void_ptr());
-	}
-
-	// If there are no sleeping threads, return.
-	// Technically this isn't thread safe, but we don't care because we
-	// check again inside the lock.
-	if (waiters.empty())
-		return;
-
-	// Get a thread to wake up from the list
-	auto_reset_event* wakeup;
+	// Wait for all currently running tasks to finish
+	~threadpool_scheduler_impl()
 	{
-		std::lock_guard<spinlock> lock(waiters_lock);
+		// Signal shutdown
+		shutdown = true;
 
-		// Check again if there are waiters
+		// Wake up any sleeping threads
+		{
+			std::lock_guard<spinlock> lock(waiters_lock);
+			for (auto_reset_event* i: waiters)
+				i->signal();
+			waiters.clear();
+		}
+
+		// Wait for the threads to finish
+		for (int i = 0; i < num_threads; i++)
+			thread_data[i].handle.join();
+
+		// Flush the public queue
+		while (void* t = public_queue->pop())
+			task_run_handle::from_void_ptr(t).run();
+	}
+
+	// Schedule a task on the thread pool
+	virtual void schedule(task_run_handle t) override final
+	{
+		// If we have already shut down, just run the task inline
+		if (shutdown) {
+			t.run();
+			return;
+		}
+
+		// Check if we are in the thread pool
+		if (thread_id != -1) {
+			// Push task onto our task queue
+			thread_data[thread_id].queue.push(t.to_void_ptr());
+		} else {
+			// Push task onto the public queue
+			public_queue->push(t.to_void_ptr());
+		}
+
+		// If there are no sleeping threads, return.
+		// Technically this isn't thread safe, but we don't care because we
+		// check again inside the lock.
 		if (waiters.empty())
 			return;
 
-		// Pop a thread from the list and wake it up
-		wakeup = waiters.back();
-		waiters.pop_back();
-	}
+		// Get a thread to wake up from the list
+		auto_reset_event* wakeup;
+		{
+			std::lock_guard<spinlock> lock(waiters_lock);
 
-	// Signal the thread
-	wakeup->signal();
-}
+			// Check again if there are waiters
+			if (waiters.empty())
+				return;
+
+			// Pop a thread from the list and wake it up
+			wakeup = waiters.back();
+			waiters.pop_back();
+		}
+
+		// Signal the thread
+		wakeup->signal();
+	}
+};
+
+// Inline scheduler implementation
+class inline_scheduler_impl: public scheduler {
+public:
+	virtual void schedule(task_run_handle t) override final
+	{
+		t.run();
+	}
+};
+
+// Thread scheduler implementation
+class thread_scheduler_impl: public scheduler {
+public:
+	virtual void schedule(task_run_handle t) override final
+	{
+		std::thread([](task_run_handle t) {
+			t.run();
+		}, std::move(t));
+	}
+};
 
 // Wait for a task to complete (for threads outside thread pool)
 static void generic_wait_handler(task_wait_handle wait_task)
@@ -405,9 +432,21 @@ wait_handler set_thread_wait_handler(wait_handler handler)
 	return old;
 }
 
-detail::threadpool_scheduler_impl& threadpool_scheduler()
+scheduler& threadpool_scheduler()
 {
 	static detail::threadpool_scheduler_impl sched;
+	return sched;
+}
+
+scheduler& inline_scheduler()
+{
+	static detail::inline_scheduler_impl sched;
+	return sched;
+}
+
+scheduler& thread_scheduler()
+{
+	static detail::thread_scheduler_impl sched;
 	return sched;
 }
 
