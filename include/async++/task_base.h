@@ -236,8 +236,8 @@ struct task_base: public ref_count_base<task_base> {
 		if (s < task_state::TASK_COMPLETED) {
 			wait_for_task(this);
 			s = state.load(std::memory_order_relaxed);
-		}
-		std::atomic_thread_fence(std::memory_order_acquire);
+		} else
+			std::atomic_thread_fence(std::memory_order_acquire);
 		return s;
 	}
 
@@ -462,8 +462,7 @@ template<typename Task> typename Task::internal_task_type* get_internal_task(con
 
 // Common code for task unwrapping
 template<typename Result, typename Func, typename Child> struct unwrapped_func {
-	task_ptr parent_task;
-	unwrapped_func(task_ptr t): parent_task(std::move(t)) {}
+	explicit unwrapped_func(task_ptr t): parent_task(std::move(t)) {}
 	void operator()(Child child_task) const
 	{
 		// Forward completion state and result to parent task
@@ -478,6 +477,7 @@ template<typename Result, typename Func, typename Child> struct unwrapped_func {
 			static_cast<task_func<Func, Result>*>(parent_task.get())->cancel(std::current_exception());
 		}
 	}
+	task_ptr parent_task;
 };
 template<typename Result, typename Func, typename Child>
 void unwrapped_finish(task_base* parent_base, Child child_task)
@@ -490,7 +490,7 @@ void unwrapped_finish(task_base* parent_base, Child child_task)
 // Execution functions for root tasks:
 // - With and without task unwraping
 template<typename Result, typename Func, bool Unwrap> struct root_exec_func: private func_base<Func> {
-	template<typename F> root_exec_func(F&& f): func_base<Func>(std::forward<F>(f)) {}
+	template<typename F> explicit root_exec_func(F&& f): func_base<Func>(std::forward<F>(f)) {}
 	void operator()(task_base* t)
 	{
 		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func())));
@@ -498,7 +498,7 @@ template<typename Result, typename Func, bool Unwrap> struct root_exec_func: pri
 	}
 };
 template<typename Result, typename Func> struct root_exec_func<Result, Func, true>: private func_base<Func> {
-	template<typename F> root_exec_func(F&& f): func_base<Func>(std::forward<F>(f)) {}
+	template<typename F> explicit root_exec_func(F&& f): func_base<Func>(std::forward<F>(f)) {}
 	void operator()(task_base* t)
 	{
 		unwrapped_finish<Result, root_exec_func>(t, std::move(std::move(this->get_func()))());

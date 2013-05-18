@@ -121,7 +121,7 @@ static void remove_waiter(auto_reset_event& thread_event)
 }
 
 // Try to steal a task from another thread's queue
-static task_handle steal_task()
+static void* steal_task()
 {
 	// Make a list of victim thread ids and shuffle it
 	std::vector<int> victims(num_threads);
@@ -134,7 +134,7 @@ static task_handle steal_task()
 		if (i == thread_id)
 			continue;
 
-		task_handle t = thread_data[i].queue.steal();
+		void* t = thread_data[i].queue.steal();
 		if (t)
 			return t;
 	}
@@ -142,13 +142,90 @@ static task_handle steal_task()
 	// No tasks found, but we might have missed one if it was just added. In
 	// practice this doesn't really matter since it will be handled by another
 	// thread.
-	return task_handle();
+	return nullptr;
+}
+
+// Wait for a task to complete (for worker threads inside thread pool)
+static void threadpool_wait_handler(task_wait_handle wait_task)
+{
+	// Get our thread's event
+	auto_reset_event& thread_event = thread_data[thread_id].event;
+
+	// Flag indicating if we have added a continuation to the task
+	bool added_continuation = false;
+
+	// Loop while waiting for the task to complete
+	while (true) {
+		// Check if the task has finished
+		if (wait_task.ready())
+			return;
+
+		// Try to get a task from the local queue
+		if (void* t = thread_data[thread_id].queue.pop()) {
+			task_run_handle::from_void_ptr(t).run();
+			continue;
+		}
+
+		while (true) {
+			// Try to fetch from the public queue
+			if (void* t = public_queue.pop()) {
+				task_run_handle::from_void_ptr(t).run();
+				break;
+			}
+
+			// Try to steal a task
+			if (void* t = steal_task()) {
+				task_run_handle::from_void_ptr(t).run();
+				break;
+			}
+
+			// No tasks found, so sleep until something happens
+			// Reset our event
+			thread_event.reset();
+
+			// Memory barrier required to ensure reset is done before checking state
+			std::atomic_thread_fence(std::memory_order_seq_cst);
+
+			// Check again here to avoid a missed wakeup
+			if (wait_task.ready())
+				return;
+
+			// If a continuation has not been added yet, add it
+			if (!added_continuation) {
+				// Create a continuation for the task we are waiting for
+				wait_task.on_finish([&thread_event] {
+					// Just signal the thread event
+					thread_event.signal();
+				});
+				added_continuation = true;
+			}
+
+			// Add our thread to the list of waiting threads
+			register_waiter(thread_event);
+
+			// Wait for our event to be signaled when a task is scheduled or
+			// the task we are waiting for has completed.
+			thread_event.wait();
+
+			// Remove our thread from the list of waiting threads
+			remove_waiter(thread_event);
+
+			// Check if the task has finished
+			if (wait_task.ready())
+				return;
+		}
+	}
 }
 
 // Worker thread main loop
 static void worker_thread(int id)
 {
+	// Save the thread id
 	thread_id = id;
+
+	// Set the wait handler so threads from the pool do useful work while
+	// waiting for another task to finish.
+	set_thread_wait_handler(threadpool_wait_handler);
 
 	// Seed the random number generator with our id. This gives each thread a
 	// different steal order.
@@ -160,16 +237,16 @@ static void worker_thread(int id)
 	// Main loop
 	while (true) {
 		// Try to get a task from the local queue
-		if (task_handle t = thread_data[thread_id].queue.pop()) {
-			t.run();
+		if (void* t = thread_data[thread_id].queue.pop()) {
+			task_run_handle::from_void_ptr(t).run();
 			continue;
 		}
 
 		// Stealing loop
 		while (true) {
 			// Try to fetch from the public queue
-			if (task_handle t = public_queue.pop()) {
-				t.run();
+			if (void* t = public_queue.pop()) {
+				task_run_handle::from_void_ptr(t).run();
 				break;
 			}
 
@@ -178,8 +255,8 @@ static void worker_thread(int id)
 				return;
 
 			// Try to steal a task
-			if (task_handle t = steal_task()) {
-				t.run();
+			if (void* t = steal_task()) {
+				task_run_handle::from_void_ptr(t).run();
 				break;
 			}
 
@@ -200,8 +277,8 @@ static void worker_thread(int id)
 	}
 }
 
-// Initialize default constructor on first use
-default_scheduler_impl::default_scheduler_impl()
+// Initialize thread pool on first use
+threadpool_scheduler_impl::threadpool_scheduler_impl()
 {
 	// Get the requested number of threads from the environment
 	// If that fails, use the number of CPUs in the system
@@ -229,7 +306,7 @@ default_scheduler_impl::default_scheduler_impl()
 }
 
 // Wait for all currently running tasks to finish
-default_scheduler_impl::~default_scheduler_impl()
+threadpool_scheduler_impl::~threadpool_scheduler_impl()
 {
 	// Signal shutdown
 	shutdown = true;
@@ -247,12 +324,12 @@ default_scheduler_impl::~default_scheduler_impl()
 		thread_data[i].handle.join();
 
 	// Flush the public queue
-	while (task_handle t = public_queue.pop())
-		t.run();
+	while (void* t = public_queue.pop())
+		task_run_handle::from_void_ptr(t).run();
 }
 
 // Schedule a task on the thread pool
-void default_scheduler_impl::schedule(task_handle t)
+void threadpool_scheduler_impl::schedule(task_run_handle t)
 {
 	// If we have already shut down, just run the task inline
 	if (shutdown) {
@@ -263,10 +340,10 @@ void default_scheduler_impl::schedule(task_handle t)
 	// Check if we are in the thread pool
 	if (thread_id != -1) {
 		// Push task onto our task queue
-		thread_data[thread_id].queue.push(std::move(t));
+		thread_data[thread_id].queue.push(t.to_void_ptr());
 	} else {
 		// Push task onto the public queue
-		public_queue.push(std::move(t));
+		public_queue.push(t.to_void_ptr());
 	}
 
 	// If there are no sleeping threads, return.
@@ -293,117 +370,44 @@ void default_scheduler_impl::schedule(task_handle t)
 	wakeup->signal();
 }
 
-// Wait for a task to complete (for worker threads inside thread pool)
-static void wait_for_task_internal(task_base* wait_task)
-{
-	// Get our thread's event
-	auto_reset_event& thread_event = thread_data[thread_id].event;
-
-	// Flag indicating if we have added a continuation to the task
-	bool added_continuation = false;
-
-	// Loop while waiting for the task to complete
-	while (true) {
-		// Check if the task has finished
-		if (wait_task->state.load(std::memory_order_relaxed) >= task_state::TASK_COMPLETED)
-			return;
-
-		// Try to get a task from the local queue
-		if (task_handle t = thread_data[thread_id].queue.pop()) {
-			t.run();
-			continue;
-		}
-
-		while (true) {
-			// Try to fetch from public queue
-			if (task_handle t = public_queue.pop()) {
-				t.run();
-				break;
-			}
-
-			// Try to steal a task
-			if (task_handle t = steal_task()) {
-				t.run();
-				break;
-			}
-
-			// No tasks found, so sleep until something happens
-			// Reset our event
-			thread_event.reset();
-
-			// Memory barrier required to ensure reset is done before checking state
-			std::atomic_thread_fence(std::memory_order_seq_cst);
-
-			// Check again here to avoid a missed wakeup
-			if (wait_task->state.load(std::memory_order_relaxed) >= task_state::TASK_COMPLETED)
-				return;
-
-			// If a continuation has not been added yet, add it
-			if (!added_continuation) {
-				// Create a continuation for the task we are waiting for
-				auto exec_func = [&thread_event](task_base*) {
-					// Just signal the thread event
-					thread_event.signal();
-				};
-				task_ptr cont(new task_func<decltype(exec_func), fake_void>(std::move(exec_func)));
-				cont->sched = &inline_scheduler();
-				cont->always_cont = true;
-				wait_task->add_continuation(std::move(cont));
-				added_continuation = true;
-			}
-
-			// Add our thread to the list of waiting threads
-			register_waiter(thread_event);
-
-			// Wait for our event to be signaled when a task is scheduled or
-			// the task we are waiting for has completed.
-			thread_event.wait();
-
-			// Remove our thread from the list of waiting threads
-			remove_waiter(thread_event);
-
-			// Check if the task has finished
-			if (wait_task->state.load(std::memory_order_relaxed) >= task_state::TASK_COMPLETED)
-				return;
-		}
-	}
-}
-
 // Wait for a task to complete (for threads outside thread pool)
-static void wait_for_task_external(task_base* wait_task)
+static void generic_wait_handler(task_wait_handle wait_task)
 {
 	// Create an event to wait on
 	auto_reset_event thread_event;
 
 	// Create a continuation for the task we are waiting for
-	auto exec_func = [&thread_event](task_base*) {
+	wait_task.on_finish([&thread_event] {
 		// Just signal the thread event
 		thread_event.signal();
-	};
-	task_ptr cont(new task_func<decltype(exec_func), fake_void>(std::move(exec_func)));
-	cont->sched = &inline_scheduler();
-	cont->always_cont = true;
-	wait_task->add_continuation(std::move(cont));
+	});
 
 	// Wait for the event to be set
 	thread_event.wait();
 }
 
+// Wait handler function, per-thread, defaults to generic version
+static thread_local wait_handler thread_wait_handler = generic_wait_handler;
+
 // Wait for a task to complete
 void wait_for_task(task_base* wait_task)
 {
-	// If we are in the thread pool, we should run tasks while waiting
-	if (thread_id != -1)
-		wait_for_task_internal(wait_task);
-	else
-		wait_for_task_external(wait_task);
+	// Dispatch to the current thread's wait handler
+	thread_wait_handler(task_wait_handle(wait_task));
 }
 
 } // namespace detail
 
-detail::default_scheduler_impl& default_scheduler()
+wait_handler set_thread_wait_handler(wait_handler handler)
 {
-	static detail::default_scheduler_impl sched;
+	wait_handler old = detail::thread_wait_handler;
+	detail::thread_wait_handler = handler;
+	return old;
+}
+
+detail::threadpool_scheduler_impl& threadpool_scheduler()
+{
+	static detail::threadpool_scheduler_impl sched;
 	return sched;
 }
 

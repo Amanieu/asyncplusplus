@@ -26,7 +26,7 @@ namespace async {
 namespace detail {
 
 // Predefined scheduler implementations
-class default_scheduler_impl;
+class threadpool_scheduler_impl;
 class inline_scheduler_impl;
 class thread_scheduler_impl;
 
@@ -37,8 +37,8 @@ typedef ref_count_ptr<task_base> task_ptr;
 // Helper function to schedule a task using a scheduler
 template<typename Sched> void schedule_task(Sched& sched, task_ptr t);
 
-// Wait for the given task to finish. If the calling thread is from the default
-// scheduler then it will run other tasks while waiting.
+// Wait for the given task to finish. This will call the wait handler currently
+// active for this thread, which causes the thread to sleep by default.
 LIBASYNC_EXPORT void wait_for_task(task_base* wait_task);
 
 } // namespace detail
@@ -48,7 +48,7 @@ class scheduler;
 
 // Run a task in a thread pool. This scheduler will wait for all tasks to finish
 // at program exit.
-LIBASYNC_EXPORT detail::default_scheduler_impl& default_scheduler();
+LIBASYNC_EXPORT detail::threadpool_scheduler_impl& threadpool_scheduler();
 
 // Run a task directly
 detail::inline_scheduler_impl& inline_scheduler();

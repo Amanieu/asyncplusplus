@@ -52,10 +52,10 @@
 # endif
 #endif
 
-// Set this to override the default scheduler for newly created tasks. The
-// original can still be accessed through async::default_scheduler().
+// Set this to override the default scheduler for newly created tasks.
+// async::threadpool_scheduler() is used by default.
 #ifndef LIBASYNC_DEFAULT_SCHEDULER
-# define LIBASYNC_DEFAULT_SCHEDULER async::default_scheduler()
+# define LIBASYNC_DEFAULT_SCHEDULER async::threadpool_scheduler()
 #endif
 
 // Force symbol visibility to hidden unless explicity exported

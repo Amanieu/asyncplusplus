@@ -182,12 +182,6 @@ public:
 			cancel();
 	}
 
-	// Check if this task is not empty
-	bool valid() const
-	{
-		return bool(internal_task);
-	}
-
 	// Get a task linked to this event
 	task<Result> get_task() const
 	{

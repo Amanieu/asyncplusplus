@@ -28,16 +28,16 @@ namespace detail {
 // stolen.
 class work_steal_queue {
 	std::size_t length;
-	std::unique_ptr<task_handle[]> items;
+	std::unique_ptr<void*[]> items;
 	spinlock lock;
 	std::atomic<std::size_t> atomic_head{0}, atomic_tail{0};
 
 public:
 	work_steal_queue()
-		: length(32), items(new task_handle[32]) {}
+		: length(32), items(new void*[32]) {}
 
 	// Push a task to the tail of this thread's queue
-	void push(task_handle t)
+	void push(void* t)
 	{
 		std::size_t tail = atomic_tail.load(std::memory_order_relaxed);
 
@@ -50,30 +50,30 @@ public:
 			// Resize the queue if it is more than 75% full
 			if (head <= length / 4) {
 				length *= 2;
-				std::unique_ptr<task_handle[]> ptr(new task_handle[length]);
-				std::move(items.get() + head, items.get() + tail, ptr.get());
+				std::unique_ptr<void*[]> ptr(new void*[length]);
+				std::copy(items.get() + head, items.get() + tail, ptr.get());
 				items = std::move(ptr);
 			} else {
 				// Simply shift the items to free up space at the end
-				std::move(items.get() + head, items.get() + tail, items.get());
+				std::copy(items.get() + head, items.get() + tail, items.get());
 			}
 			tail -= head;
 			atomic_head.store(0, std::memory_order_relaxed);
 		}
 
 		// Now add the task
-		items[tail] = std::move(t);
+		items[tail] = t;
 		atomic_tail.store(tail + 1, std::memory_order_release);
 	}
 
 	// Pop a task from the tail of this thread's queue
-	task_handle pop()
+	void* pop()
 	{
 		std::size_t tail = atomic_tail.load(std::memory_order_relaxed);
 
 		// Early exit if queue is empty
 		if (atomic_head.load(std::memory_order_relaxed) >= tail)
-			return task_handle();
+			return nullptr;
 
 		// Make sure tail is stored before we read head
 		atomic_tail.store(--tail, std::memory_order_relaxed);
@@ -81,22 +81,22 @@ public:
 
 		// Race to the queue
 		if (atomic_head.load(std::memory_order_relaxed) <= tail)
-			return std::move(items[tail]);
+			return items[tail];
 
 		// There is a concurrent steal or no items, lock the queue and try again
 		std::lock_guard<spinlock> locked(lock);
 
 		// Check if the item is still available
 		if (atomic_head.load(std::memory_order_relaxed) <= tail)
-			return std::move(items[tail]);
+			return items[tail];
 
 		// Otherwise restore the tail and fail
 		atomic_tail.store(tail + 1, std::memory_order_relaxed);
-		return task_handle();
+		return nullptr;
 	}
 
 	// Steal a task from the head of this thread's queue
-	task_handle steal()
+	void* steal()
 	{
 		// Lock the queue to prevent concurrent steals
 		std::lock_guard<spinlock> locked(lock);
@@ -110,12 +110,12 @@ public:
 		if (head < atomic_tail.load(std::memory_order_relaxed)) {
 			// Need acquire fence to synchronise with concurrent push
 			std::atomic_thread_fence(std::memory_order_acquire);
-			return std::move(items[head]);
+			return items[head];
 		}
 
 		// Otherwise restore the head and fail
 		atomic_head.store(head, std::memory_order_relaxed);
-		return task_handle();
+		return nullptr;
 	}
 };
 
