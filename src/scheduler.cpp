@@ -148,8 +148,8 @@ static void* steal_task()
 // Wait for a task to complete (for worker threads inside thread pool)
 static void threadpool_wait_handler(task_wait_handle wait_task)
 {
-	// Get our thread's event
-	auto_reset_event& thread_event = thread_data[thread_id].event;
+	// Get our thread's data
+	thread_data_t& current_thread = thread_data[thread_id];
 
 	// Flag indicating if we have added a continuation to the task
 	bool added_continuation = false;
@@ -161,7 +161,7 @@ static void threadpool_wait_handler(task_wait_handle wait_task)
 			return;
 
 		// Try to get a task from the local queue
-		if (void* t = thread_data[thread_id].queue.pop()) {
+		if (void* t = current_thread.queue.pop()) {
 			task_run_handle::from_void_ptr(t).run();
 			continue;
 		}
@@ -181,7 +181,7 @@ static void threadpool_wait_handler(task_wait_handle wait_task)
 
 			// No tasks found, so sleep until something happens
 			// Reset our event
-			thread_event.reset();
+			current_thread.event.reset();
 
 			// Memory barrier required to ensure reset is done before checking state
 			std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -193,22 +193,22 @@ static void threadpool_wait_handler(task_wait_handle wait_task)
 			// If a continuation has not been added yet, add it
 			if (!added_continuation) {
 				// Create a continuation for the task we are waiting for
-				wait_task.on_finish([&thread_event] {
+				wait_task.on_finish([&current_thread] {
 					// Just signal the thread event
-					thread_event.signal();
+					current_thread.event.signal();
 				});
 				added_continuation = true;
 			}
 
 			// Add our thread to the list of waiting threads
-			register_waiter(thread_event);
+			register_waiter(current_thread.event);
 
 			// Wait for our event to be signaled when a task is scheduled or
 			// the task we are waiting for has completed.
-			thread_event.wait();
+			current_thread.event.wait();
 
 			// Remove our thread from the list of waiting threads
-			remove_waiter(thread_event);
+			remove_waiter(current_thread.event);
 
 			// Check if the task has finished
 			if (wait_task.ready())
@@ -231,13 +231,13 @@ static void worker_thread(int id)
 	// different steal order.
 	thread_data[thread_id].rng.seed(thread_id);
 
-	// Get our thread's event
-	auto_reset_event& thread_event = thread_data[thread_id].event;
+	// Get our thread's data
+	thread_data_t& current_thread = thread_data[thread_id];
 
 	// Main loop
 	while (true) {
 		// Try to get a task from the local queue
-		if (void* t = thread_data[thread_id].queue.pop()) {
+		if (void* t = current_thread.queue.pop()) {
 			task_run_handle::from_void_ptr(t).run();
 			continue;
 		}
@@ -262,18 +262,36 @@ static void worker_thread(int id)
 
 			// No tasks found, so wait for a task to be scheduled
 			// Reset our event
-			thread_event.reset();
+			current_thread.event.reset();
 
 			// Add our thread to the list of waiting threads
-			register_waiter(thread_event);
+			register_waiter(current_thread.event);
 
 			// Check again for shutdown, otherwise we might miss the wakeup
 			if (shutdown)
 				return;
 
 			// Wait for our event to be signaled when a task is scheduled
-			thread_event.wait();
+			current_thread.event.wait();
 		}
+	}
+}
+
+// Recursive function to spawn all worker threads in parallel
+static void recursive_spawn_worker_thread(int index, int threads)
+{
+	// If we are down to 1 thread, go to the worker main loop
+	if (threads == 1)
+		worker_thread(index);
+	else {
+		// Split thread range into 2 sub-ranges
+		int mid = index + threads / 2;
+
+		// Spawn a thread for half of the range
+		thread_data[mid].handle = std::thread(recursive_spawn_worker_thread, mid, threads - threads / 2);
+
+		// Tail-recurse to handle our half of the range
+		recursive_spawn_worker_thread(index, threads / 2);
 	}
 }
 
@@ -307,8 +325,7 @@ public:
 			new (&thread_data[i]) thread_data_t;
 
 		// Start worker threads
-		for (int i = 0; i < num_threads; i++)
-			thread_data[i].handle = std::thread(worker_thread, i);
+		thread_data[0].handle = std::thread(recursive_spawn_worker_thread, 0, num_threads);
 	}
 
 	// Wait for all currently running tasks to finish
