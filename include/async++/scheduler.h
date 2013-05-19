@@ -116,7 +116,7 @@ public:
 namespace detail {
 
 // Schedule a task for execution using its scheduler
-void schedule_task(scheduler& sched, task_ptr t)
+inline void schedule_task(scheduler& sched, task_ptr t)
 {
 	sched.schedule(task_run_handle(std::move(t)));
 }
