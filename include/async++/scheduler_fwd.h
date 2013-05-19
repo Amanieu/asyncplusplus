@@ -28,8 +28,7 @@ namespace async {
 class task_run_handle;
 class scheduler {
 public:
-	// Schedule a task for execution. Failure can be indicated by throwing, but
-	// then the task must not be executed.
+	// Schedule a task for execution.
 	virtual void schedule(task_run_handle t) = 0;
 };
 

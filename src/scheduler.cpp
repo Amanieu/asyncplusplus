@@ -349,6 +349,11 @@ public:
 		// Flush the public queue
 		while (void* t = public_queue->pop())
 			task_run_handle::from_void_ptr(t).run();
+
+		// Release resources
+		public_queue = nullptr;
+		thread_data = nullptr;
+		waiters.clear();
 	}
 
 	// Schedule a task on the thread pool
