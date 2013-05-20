@@ -415,7 +415,7 @@ public:
 	{
 		std::thread([](task_run_handle t) {
 			t.run();
-		}, std::move(t));
+		}, std::move(t)).detach();
 	}
 };
 
