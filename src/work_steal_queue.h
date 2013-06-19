@@ -37,7 +37,7 @@ public:
 		: length(32), items(new void*[32]) {}
 
 	// Push a task to the tail of this thread's queue
-	void push(void* t)
+	void push(task_run_handle t)
 	{
 		std::size_t tail = atomic_tail.load(std::memory_order_relaxed);
 
@@ -62,7 +62,7 @@ public:
 		}
 
 		// Now add the task
-		items[tail] = t;
+		items[tail] = t.to_void_ptr();
 		atomic_tail.store(tail + 1, std::memory_order_release);
 	}
 

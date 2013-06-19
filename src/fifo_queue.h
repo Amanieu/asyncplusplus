@@ -33,7 +33,7 @@ public:
 		: length(32), items(new void*[32]) {}
 
 	// Push a task to the end of the queue
-	void push(void* t)
+	void push(task_run_handle t)
 	{
 		std::lock_guard<spinlock> locked(lock);
 
@@ -47,7 +47,7 @@ public:
 		}
 
 		// Push the item
-		items[tail] = t;
+		items[tail] = t.to_void_ptr();
 		tail = (tail + 1) & (length - 1);
 	}
 

@@ -368,10 +368,10 @@ public:
 		// Check if we are in the thread pool
 		if (thread_id != -1) {
 			// Push task onto our task queue
-			thread_data[thread_id].queue.push(t.to_void_ptr());
+			thread_data[thread_id].queue.push(std::move(t));
 		} else {
 			// Push task onto the public queue
-			public_queue->push(t.to_void_ptr());
+			public_queue->push(std::move(t));
 		}
 
 		// If there are no sleeping threads, return.
