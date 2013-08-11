@@ -28,7 +28,7 @@ namespace detail {
 // Pseudo-void type: it takes up no space but can be moved and copied
 struct fake_void {};
 template<typename T> using void_to_fake_void = std::conditional<std::is_void<T>::value, fake_void, T>;
-template<typename T> T&& fake_void_to_void(T&& x)
+template<typename T> T fake_void_to_void(T&& x)
 {
 	return std::forward<T>(x);
 }
