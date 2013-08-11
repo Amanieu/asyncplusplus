@@ -22,6 +22,8 @@
 # include <unistd.h>
 # include <sys/syscall.h>
 # include <linux/futex.h>
+#elif defined(_WIN32)
+# include <windows.h>
 #else
 # include <mutex>
 # include <condition_variable>
@@ -78,6 +80,36 @@ public:
 		// Wake up a sleeping thread if futex_val was negative
 		if (val < 0)
 			syscall(SYS_futex, reinterpret_cast<int*>(&futex_val), FUTEX_WAKE_PRIVATE, 1);
+	}
+};
+#elif defined(_WIN32)
+// Windows-specific implementation using CreateEvent
+class auto_reset_event {
+	HANDLE event;
+
+public:
+	auto_reset_event()
+	{
+		event = CreateEvent(NULL, FALSE, FALSE, NULL);
+	}
+	~auto_reset_event()
+	{
+		CloseHandle(event);
+	}
+
+	void wait()
+	{
+		WaitForSingleObject(event);
+	}
+
+	void reset()
+	{
+		ResetEvent(event);
+	}
+
+	void signal()
+	{
+		SetEvent(event);
 	}
 };
 #else
