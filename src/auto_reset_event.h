@@ -99,7 +99,7 @@ public:
 
 	void wait()
 	{
-		WaitForSingleObject(event);
+		WaitForSingleObject(event, INFINITE);
 	}
 
 	void reset()

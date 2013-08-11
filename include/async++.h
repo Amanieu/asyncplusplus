@@ -60,7 +60,7 @@
 #endif
 
 // Force symbol visibility to hidden unless explicity exported
-#ifdef __GNUC__
+#if defined(__GNUC__) && !defined(_WIN32)
 #pragma GCC visibility push(hidden)
 #endif
 
@@ -90,7 +90,7 @@ struct LIBASYNC_EXPORT task_canceled {};
 #include "async++/parallel_for.h"
 #include "async++/parallel_reduce.h"
 
-#ifdef __GNUC__
+#if defined(__GNUC__) && !defined(_WIN32)
 #pragma GCC visibility pop
 #endif
 
