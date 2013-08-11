@@ -30,14 +30,34 @@ int main()
 
     task4.get();
     std::cout << "Task 4 has completed" << std::endl;
+
+    async::parallel_invoke([] {
+        std::cout << "This is executed in parallel..." << std::endl;
+    }, [] {
+        std::cout << "with this" << std::endl;
+    });
+
+    async::parallel_for(async::irange(0, 5), [](int x) {
+        std::cout << x;
+    });
+    std::cout << std::endl;
+
+    int r = async::parallel_reduce({1, 2, 3, 4}, 0, [](int x, int y) {
+        return x + y;
+    });
+    std::cout << "The sum of {1, 2, 3, 4} is " << r << std::endl;
 }
 
-// Output (order of tasks 1 and 2 may be different):
+// Output (order may vary in some places):
 // Task 1 executes asynchronously
 // Task 2 executes in parallel with task 1
 // Task 3 executes after task 2, which returned 42
 // Task 4 executes after tasks 1 and 3. Task 3 returned 126
 // Task 4 has completed
+// This is executed in parallel...
+// with this
+// 01234
+// The sum of {1, 2, 3, 4} is 10
 ```
 
 Supported Platforms
