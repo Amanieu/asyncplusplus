@@ -25,6 +25,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <exception>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -74,6 +75,7 @@ struct LIBASYNC_EXPORT task_canceled {};
 
 } // namespace async
 
+// Include sub-headers
 #include "async++/spinlock.h"
 #include "async++/traits.h"
 #include "async++/ref_count.h"
@@ -83,6 +85,10 @@ struct LIBASYNC_EXPORT task_canceled {};
 #include "async++/task.h"
 #include "async++/when_all_any.h"
 #include "async++/cancel.h"
+#include "async++/range.h"
+#include "async++/parallel_invoke.h"
+#include "async++/parallel_for.h"
+#include "async++/parallel_reduce.h"
 
 #ifdef __GNUC__
 #pragma GCC visibility pop
