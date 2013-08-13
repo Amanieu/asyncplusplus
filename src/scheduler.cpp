@@ -58,11 +58,11 @@
 
 // Cacheline alignment to avoid false sharing between different threads
 #ifdef __GNUC__
-#define CACHELINE_ALIGN __attribute__((aligned(64)))
+# define CACHELINE_ALIGN __attribute__((aligned(64)))
 #elif _MSC_VER
-#define CACHELINE_ALIGN __declspec(align(64))
+# define CACHELINE_ALIGN __declspec(align(64))
 #else
-#define CACHELINE_ALIGN alignas(64)
+# define CACHELINE_ALIGN alignas(64)
 #endif
 
 namespace async {
@@ -97,6 +97,7 @@ struct thread_data_deleter {
 static std::unique_ptr<thread_data_t[], thread_data_deleter> thread_data;
 
 // Global queue for tasks from outside the pool
+static spinlock public_queue_lock;
 static std::unique_ptr<fifo_queue> public_queue;
 
 // Shutdown request indicator
@@ -118,6 +119,13 @@ static void remove_waiter(auto_reset_event& thread_event)
 {
 	std::lock_guard<spinlock> lock(waiters_lock);
 	waiters.erase(std::remove(waiters.begin(), waiters.end(), &thread_event), waiters.end());
+}
+
+// Try to pop a task from the public queue
+static void* pop_public_queue()
+{
+	std::lock_guard<spinlock> locked(public_queue_lock);
+	return public_queue->pop();
 }
 
 // Try to steal a task from another thread's queue
@@ -168,7 +176,7 @@ static void threadpool_wait_handler(task_wait_handle wait_task)
 
 		while (true) {
 			// Try to fetch from the public queue
-			if (void* t = public_queue->pop()) {
+			if (void* t = pop_public_queue()) {
 				task_run_handle::from_void_ptr(t).run();
 				break;
 			}
@@ -245,7 +253,7 @@ static void worker_thread(int id)
 		// Stealing loop
 		while (true) {
 			// Try to fetch from the public queue
-			if (void* t = public_queue->pop()) {
+			if (void* t = pop_public_queue()) {
 				task_run_handle::from_void_ptr(t).run();
 				break;
 			}
@@ -347,7 +355,7 @@ public:
 			thread_data[i].handle.join();
 
 		// Flush the public queue
-		while (void* t = public_queue->pop())
+		while (void* t = pop_public_queue())
 			task_run_handle::from_void_ptr(t).run();
 
 		// Release resources
@@ -370,6 +378,14 @@ public:
 			// Push task onto our task queue
 			thread_data[thread_id].queue.push(std::move(t));
 		} else {
+			std::lock_guard<spinlock> locked(public_queue_lock);
+
+			// Double-check shutdown while holding the lock to avoid a race
+			if (shutdown) {
+				t.run();
+				return;
+			}
+
 			// Push task onto the public queue
 			public_queue->push(std::move(t));
 		}

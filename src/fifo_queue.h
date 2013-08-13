@@ -25,7 +25,6 @@ namespace detail {
 class fifo_queue {
 	std::size_t length;
 	std::unique_ptr<void*[]> items;
-	spinlock lock;
 	std::size_t head{0}, tail{0};
 
 public:
@@ -35,8 +34,6 @@ public:
 	// Push a task to the end of the queue
 	void push(task_run_handle t)
 	{
-		std::lock_guard<spinlock> locked(lock);
-
 		// Resize queue if it is full
 		if (head == ((tail + 1) & (length - 1))) {
 			length *= 2;
@@ -54,8 +51,6 @@ public:
 	// Pop a task from the front of the queue
 	void* pop()
 	{
-		std::lock_guard<spinlock> locked(lock);
-
 		// See if an item is available
 		if (head == tail)
 			return nullptr;
