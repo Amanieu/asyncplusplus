@@ -367,12 +367,6 @@ public:
 	// Schedule a task on the thread pool
 	virtual void schedule(task_run_handle t) override final
 	{
-		// If we have already shut down, just run the task inline
-		if (shutdown) {
-			t.run();
-			return;
-		}
-
 		// Check if we are in the thread pool
 		if (thread_id != -1) {
 			// Push task onto our task queue
@@ -380,7 +374,7 @@ public:
 		} else {
 			std::lock_guard<spinlock> locked(public_queue_lock);
 
-			// Double-check shutdown while holding the lock to avoid a race
+			// If we have already shut down, just run the task inline
 			if (shutdown) {
 				t.run();
 				return;
