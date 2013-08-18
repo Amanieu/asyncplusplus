@@ -67,7 +67,7 @@ The only requirement to use Async++ is a C++11 compiler and standard library. Un
 
 - Linux: GCC 4.7+ and Clang 3.2+ work.
 - Mac: Works with Apple Clang (using libc++). GCC also works but you must get a recent version (4.7+).
-- Windows: GCC 4.8+ with posix threads works. MSVC and Intel compilers are not supported.
+- Windows: GCC 4.8+ with posix threads works. Experimental support for Visual Studio 2013 is also available.
 
 Building and Installing
 -----------------------
