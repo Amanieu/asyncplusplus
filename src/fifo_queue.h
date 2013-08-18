@@ -25,11 +25,11 @@ namespace detail {
 class fifo_queue {
 	std::size_t length;
 	std::unique_ptr<void*[]> items;
-	std::size_t head{0}, tail{0};
+	std::size_t head, tail;
 
 public:
 	fifo_queue()
-		: length(32), items(new void*[32]) {}
+		: length(32), items(new void*[32]), head(0), tail(0) {}
 
 	// Push a task to the end of the queue
 	void push(task_run_handle t)

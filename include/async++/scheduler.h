@@ -47,7 +47,7 @@ class task_wait_handle {
 	// Non-copyable and non-movable, it can only be used in a wait handler
 	task_wait_handle(const task_wait_handle& other)
 		: handle(other.handle) {}
-	task_wait_handle& operator=(const task_wait_handle&) = delete;
+	task_wait_handle& operator=(const task_wait_handle&);
 
 public:
 	// Check if the task has finished executing
@@ -79,11 +79,18 @@ class task_run_handle {
 	explicit task_run_handle(detail::task_ptr t)
 		: handle(std::move(t)) {}
 
+	// Movable but not copyable
+	task_run_handle(const task_run_handle&);
+	task_run_handle& operator=(const task_run_handle&);
+
 public:
-	task_run_handle(const task_run_handle&) = delete;
-	task_run_handle(task_run_handle&&) = default;
-	task_run_handle& operator=(const task_run_handle&) = delete;
-	task_run_handle& operator=(task_run_handle&&) = default;
+	task_run_handle(task_run_handle&& other)
+		: handle(std::move(other.handle)) {}
+	task_run_handle& operator=(task_run_handle&& other)
+	{
+		std::swap(handle, other.handle);
+		return *this;
+	}
 
 	// Run the task and release the handle
 	void run()

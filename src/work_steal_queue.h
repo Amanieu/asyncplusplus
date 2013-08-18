@@ -30,11 +30,11 @@ class work_steal_queue {
 	std::size_t length;
 	std::unique_ptr<void*[]> items;
 	spinlock lock;
-	std::atomic<std::size_t> atomic_head{0}, atomic_tail{0};
+	std::atomic<std::size_t> atomic_head, atomic_tail;
 
 public:
 	work_steal_queue()
-		: length(32), items(new void*[32]) {}
+		: length(32), items(new void*[32]), atomic_head(0), atomic_tail(0) {}
 
 	// Push a task to the tail of this thread's queue
 	void push(task_run_handle t)

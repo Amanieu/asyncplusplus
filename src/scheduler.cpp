@@ -423,7 +423,12 @@ class thread_scheduler_impl: public scheduler {
 public:
 	virtual void schedule(task_run_handle t) override final
 	{
+		// MSVC doesn't move the handle when running the thread function
+#ifdef _MSC_VER
+		std::thread([](task_run_handle& t) {
+#else
 		std::thread([](task_run_handle t) {
+#endif
 			t.run();
 		}, std::move(t)).detach();
 	}

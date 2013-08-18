@@ -23,6 +23,7 @@
 # include <sys/syscall.h>
 # include <linux/futex.h>
 #elif defined(_WIN32)
+# define NOMINMAX
 # include <windows.h>
 #else
 # include <mutex>

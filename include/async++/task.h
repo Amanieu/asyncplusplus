@@ -156,18 +156,20 @@ protected:
 		return true;
 	}
 
-public:
 	// Movable but not copyable
-	basic_event(const basic_event&) = delete;
+	basic_event(const basic_event&);
+	basic_event& operator=(const basic_event&);
+
+public:
 	basic_event(basic_event&& other)
 		: internal_task(std::move(other.internal_task))
 	{
 		other.internal_task = nullptr;
 	}
-	basic_event& operator=(const basic_event&) = delete;
 	basic_event& operator=(basic_event&& other)
 	{
 		std::swap(internal_task, other.internal_task);
+		return *this;
 	}
 
 	// Main constructor
@@ -237,13 +239,19 @@ template<typename Result> class task: public detail::basic_task<Result> {
 	template<typename Func> friend task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn(scheduler& sched, Func&& f);
 	friend class detail::basic_event<Result>;
 
-public:
 	// Movable but not copyable
-	task() = default;
-	task(const task&) = delete;
-	task(task&&) = default;
-	task& operator=(const task&) = delete;
-	task& operator=(task&&) = default;
+	task(const task&);
+	task& operator=(const task&);
+
+public:
+	task() {}
+	task(task&& other)
+		: detail::basic_task<Result>(std::move(other)) {}
+	task& operator=(task&& other)
+	{
+		detail::basic_task<Result>::operator=(std::move(other));
+		return *this;
+	}
 
 	// Get the result of the task
 	Result get()
@@ -291,11 +299,7 @@ template<typename Result> class shared_task: public detail::basic_task<Result> {
 
 public:
 	// Movable and copyable
-	shared_task() = default;
-	shared_task(const shared_task&) = default;
-	shared_task(shared_task&&) = default;
-	shared_task& operator=(const shared_task&) = default;
-	shared_task& operator=(shared_task&&) = default;
+	shared_task() {}
 
 	// Get the result of the task
 	get_result get() const
@@ -318,14 +322,20 @@ public:
 };
 
 // Special task type which can be triggered manually rather than when a function executes.
-template<typename Result> class event_task: public detail::basic_event<Result> {
-public:
+template<typename Result> class event_task : public detail::basic_event<Result> {
 	// Movable but not copyable
-	event_task() = default;
-	event_task(const event_task&) = delete;
-	event_task(event_task&&) = default;
-	event_task& operator=(const event_task&) = delete;
-	event_task& operator=(event_task&& other) = default;
+	event_task(const event_task&);
+	event_task& operator=(const event_task& other);
+
+public:
+	event_task() {}
+	event_task(event_task&& other)
+		: detail::basic_event<Result>(std::move(other)) {}
+	event_task& operator=(event_task&& other)
+	{
+		detail::basic_event<Result>::operator=(std::move(other));
+		return *this;
+	}
 
 	// Set the result of the task, mark it as completed and run its continuations
 	bool set(const Result& result) const
@@ -340,13 +350,19 @@ public:
 
 // Specialization for references
 template<typename Result> class event_task<Result&>: public detail::basic_event<Result&> {
-public:
 	// Movable but not copyable
-	event_task() = default;
-	event_task(const event_task&) = delete;
-	event_task(event_task&&) = default;
-	event_task& operator=(const event_task&) = delete;
-	event_task& operator=(event_task&& other) = default;
+	event_task(const event_task&);
+	event_task& operator=(const event_task& other);
+
+public:
+	event_task() {}
+	event_task(event_task&& other)
+		: detail::basic_event<Result&>(std::move(other)) {}
+	event_task& operator=(event_task&& other)
+	{
+		detail::basic_event<Result&>::operator=(std::move(other));
+		return *this;
+	}
 
 	// Set the result of the task, mark it as completed and run its continuations
 	bool set(Result& result) const
@@ -357,13 +373,19 @@ public:
 
 // Specialization for void
 template<> class event_task<void>: public detail::basic_event<void> {
-public:
 	// Movable but not copyable
-	event_task() = default;
-	event_task(const event_task&) = delete;
-	event_task(event_task&&) = default;
-	event_task& operator=(const event_task&) = delete;
-	event_task& operator=(event_task&& other) = default;
+	event_task(const event_task&);
+	event_task& operator=(const event_task& other);
+
+public:
+	event_task() {}
+	event_task(event_task&& other)
+		: detail::basic_event<void>(std::move(other)) {}
+	event_task& operator=(event_task&& other)
+	{
+		detail::basic_event<void>::operator=(std::move(other));
+		return *this;
+	}
 
 	// Set the result of the task, mark it as completed and run its continuations
 	bool set()
@@ -391,20 +413,20 @@ template<typename Func> class local_task {
 
 	// Constructor, used by local_spawn
 	local_task(scheduler& sched, Func&& f)
-		: internal_task(exec_func(std::forward<Func>(f)))
+		: internal_task(std::forward<Func>(f))
 	{
 		// Avoid an expensive ref-count modification since the task isn't shared yet
 		internal_task.add_ref_unlocked();
 		detail::schedule_task(sched, detail::task_ptr(&internal_task));
 	}
 
-public:
 	// Non-movable and non-copyable
-	local_task(const local_task&) = delete;
-	local_task(local_task&&) = delete;
-	local_task& operator=(const local_task&) = delete;
-	local_task& operator=(local_task&&) = delete;
+	local_task(const local_task&);
+	local_task(local_task &&);
+	local_task& operator=(const local_task&);
+	local_task& operator=(local_task&&);
 
+public:
 	// Wait for the task to complete when destroying
 	~local_task()
 	{

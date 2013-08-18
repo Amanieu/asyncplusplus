@@ -43,29 +43,43 @@ enum class dispatch_op {
 // Continuation vector optimized for single continuations. Only supports a
 // minimal set of operations.
 class continuation_vector {
-	std::size_t count{0};
+	std::size_t count;
 
-	union data_union {
-		data_union(): inline_data() {}
+	struct data_union {
+		data_union()
+		{
+			new(&inline_data()) task_ptr;
+		}
 
 		// Destruction is handled by the parent class
 		~data_union() {}
 
+		std::aligned_storage<sizeof(task_ptr), std::alignment_of<task_ptr>::value>::type data;
+
 		// Inline continuation used for common case (only one continuation)
-		task_ptr inline_data;
+		task_ptr& inline_data()
+		{
+			return *reinterpret_cast<task_ptr*>(&data);
+		}
 
 		// Vector of continuations. The capacity is the lowest power of 2
 		// which is >= count.
-		std::unique_ptr<task_ptr[]> vector_data;
+		std::unique_ptr<task_ptr []>& vector_data()
+		{
+			return *reinterpret_cast<std::unique_ptr<task_ptr []>*>(&data);
+		}
 	} data;
 
 public:
+	continuation_vector()
+		: count(0) {}
+
 	task_ptr* begin()
 	{
 		if (count > 1)
-			return data.vector_data.get();
+			return data.vector_data().get();
 		else
-			return &data.inline_data;
+			return &data.inline_data();
 	}
 	task_ptr* end()
 	{
@@ -76,36 +90,36 @@ public:
 	{
 		// First try to insert the continuation inline
 		if (count == 0) {
-			data.inline_data = std::move(t);
+			data.inline_data() = std::move(t);
 			count = 1;
 		}
 
 		// Check if we need to go from an inline continuation to a vector
 		else if (count == 1) {
 			std::unique_ptr<task_ptr[]> ptr(new task_ptr[2]);
-			ptr[0] = std::move(data.inline_data);
+			ptr[0] = std::move(data.inline_data());
 			ptr[1] = std::move(t);
-			data.inline_data.~task_ptr();
-			new(&data.vector_data) std::unique_ptr<task_ptr[]>(std::move(ptr));
+			data.inline_data().~task_ptr();
+			new(&data.vector_data()) std::unique_ptr<task_ptr []>(std::move(ptr));
 			count = 2;
 		}
 
 		// Check if the vector needs to be grown (size is a power of 2)
 		else if ((count & (count - 1)) == 0) {
 			std::unique_ptr<task_ptr[]> ptr(new task_ptr[count * 2]);
-			std::move(data.vector_data.get(), data.vector_data.get() + count, ptr.get());
+			std::move(data.vector_data().get(), data.vector_data().get() + count, ptr.get());
 			ptr[count++] = std::move(t);
-			data.vector_data = std::move(ptr);
+			data.vector_data() = std::move(ptr);
 		}
 	}
 
 	void clear()
 	{
 		if (count > 1) {
-			data.vector_data.~unique_ptr();
-			new(&data.inline_data) task_ptr;
+			data.vector_data().~unique_ptr();
+			new(&data.inline_data()) task_ptr;
 		} else
-			data.inline_data = nullptr;
+			data.inline_data() = nullptr;
 		count = 0;
 	}
 
@@ -117,16 +131,16 @@ public:
 	~continuation_vector()
 	{
 		if (count > 1)
-			data.vector_data.~unique_ptr();
+			data.vector_data().~unique_ptr();
 		else
-			data.inline_data.~task_ptr();
+			data.inline_data().~task_ptr();
 	}
 };
 
 // Type-generic base task object
 struct task_base: public ref_count_base<task_base> {
 	// Task state
-	std::atomic<task_state> state{task_state::TASK_PENDING};
+	std::atomic<task_state> state;
 
 	// Whether this task should be run even if the parent was canceled
 	bool always_cont;
@@ -146,6 +160,10 @@ struct task_base: public ref_count_base<task_base> {
 	// - Free the task function when canceling
 	// - Destroy the task function and result
 	void (*dispatch)(task_base*, dispatch_op);
+
+	// Initialize task state
+	task_base()
+		: state(task_state::TASK_PENDING) {}
 
 	// Destroy task function and result in destructor
 	~task_base()
@@ -357,9 +375,15 @@ template<typename Func, typename = void> struct func_base {
 		return func;
 	}
 };
-template<typename Func> struct func_base<Func, typename std::enable_if<std::is_empty<Func>::value>::type>: private Func {
+template<typename Func> struct func_base<Func, typename std::enable_if<std::is_empty<Func>::value>::type> {
 	template<typename F> explicit func_base(F&& f)
-		: Func(std::forward<F>(f)) {}
+	{
+		new(this) Func(std::forward<F>(f));
+	}
+	~func_base()
+	{
+		get_func().~Func();
+	}
 	Func& get_func()
 	{
 		return *reinterpret_cast<Func*>(this);

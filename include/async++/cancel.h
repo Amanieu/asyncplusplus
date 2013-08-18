@@ -26,15 +26,17 @@ namespace async {
 
 // A flag which can be used to request cancellation
 class cancellation_token {
-	std::atomic<bool> state{false};
+	std::atomic<bool> state;
+
+	// Non-copyable and non-movable
+	cancellation_token(const cancellation_token&);
+	cancellation_token(cancellation_token&&);
+	cancellation_token& operator=(const cancellation_token&);
+	cancellation_token& operator=(cancellation_token&&);
 
 public:
-	// Non-copyable and non-movable
-	cancellation_token() = default;
-	cancellation_token(const cancellation_token&) = delete;
-	cancellation_token(cancellation_token&&) = delete;
-	cancellation_token& operator=(const cancellation_token&) = delete;
-	cancellation_token& operator=(cancellation_token&&) = delete;
+	cancellation_token()
+		: state(false) {}
 
 	bool is_canceled() const
 	{

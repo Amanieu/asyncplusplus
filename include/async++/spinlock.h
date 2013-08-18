@@ -27,15 +27,17 @@ namespace detail {
 
 // Spinlock with same interface as std::mutex
 class spinlock {
-	std::atomic<bool> locked{false};
+	std::atomic<bool> locked;
+
+	// Non-copyable and non-movable
+	spinlock(const spinlock&);
+	spinlock(spinlock&&);
+	spinlock& operator=(const spinlock&);
+	spinlock& operator=(spinlock&&);
 
 public:
-	// Non-copyable and non-movable
-	spinlock() = default;
-	spinlock(const spinlock&) = delete;
-	spinlock(spinlock&&) = delete;
-	spinlock& operator=(const spinlock&) = delete;
-	spinlock& operator=(spinlock&&) = delete;
+	spinlock()
+		: locked(false) {}
 
 	void lock()
 	{

@@ -66,7 +66,7 @@ public:
 		if (p)
 			p->add_ref();
 	}
-	ref_count_ptr(ref_count_ptr&& other) noexcept
+	ref_count_ptr(ref_count_ptr&& other)
 		: p(other.p)
 	{
 		other.p = nullptr;
@@ -87,7 +87,7 @@ public:
 			p->add_ref();
 		return *this;
 	}
-	ref_count_ptr& operator=(ref_count_ptr&& other) noexcept
+	ref_count_ptr& operator=(ref_count_ptr&& other)
 	{
 		std::swap(p, other.p);
 		return *this;
