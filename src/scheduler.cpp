@@ -77,7 +77,6 @@ static int num_threads;
 // Per-thread data, aligned to cachelines to avoid false sharing
 struct CACHELINE_ALIGN thread_data_t {
 	work_steal_queue queue;
-	std::thread handle;
 	std::minstd_rand rng;
 	auto_reset_event event;
 };
@@ -102,6 +101,10 @@ static std::unique_ptr<fifo_queue> public_queue;
 
 // Shutdown request indicator
 static bool shutdown = false;
+
+// Shutdown complete event
+static std::atomic<int> shutdown_num_threads;
+static auto_reset_event shutdown_complete_event;
 
 // List of threads waiting for tasks to run
 static spinlock waiters_lock;
@@ -225,6 +228,16 @@ static void threadpool_wait_handler(task_wait_handle wait_task)
 	}
 }
 
+// Worker thread exit
+static void worker_thread_exit()
+{
+	// Signal that this thread has finished
+	if (shutdown_num_threads.fetch_sub(1, std::memory_order_release) == 1) {
+		std::atomic_thread_fence(std::memory_order_acquire);
+		shutdown_complete_event.signal();
+	}
+}
+
 // Worker thread main loop
 static void worker_thread(int id)
 {
@@ -259,8 +272,10 @@ static void worker_thread(int id)
 			}
 
 			// If there are no local or public tasks, we can shut down
-			if (shutdown)
+			if (shutdown) {
+				worker_thread_exit();
 				return;
+			}
 
 			// Try to steal a task
 			if (void* t = steal_task()) {
@@ -276,8 +291,10 @@ static void worker_thread(int id)
 			register_waiter(current_thread.event);
 
 			// Check again for shutdown, otherwise we might miss the wakeup
-			if (shutdown)
+			if (shutdown) {
+				worker_thread_exit();
 				return;
+			}
 
 			// Wait for our event to be signaled when a task is scheduled
 			current_thread.event.wait();
@@ -296,7 +313,7 @@ static void recursive_spawn_worker_thread(int index, int threads)
 		int mid = index + threads / 2;
 
 		// Spawn a thread for half of the range
-		thread_data[mid].handle = std::thread(recursive_spawn_worker_thread, mid, threads - threads / 2);
+		std::thread(recursive_spawn_worker_thread, mid, threads - threads / 2).detach();
 
 		// Tail-recurse to handle our half of the range
 		recursive_spawn_worker_thread(index, threads / 2);
@@ -321,6 +338,9 @@ public:
 		// Make sure thread count isn't something ridiculous
 		num_threads = std::max(num_threads, 1);
 
+		// Initialize shutdown_num_threads
+		shutdown_num_threads.store(num_threads, std::memory_order_relaxed);
+
 		// Reserve space in the waiters list to avoid resizes while running
 		waiters.reserve(num_threads);
 
@@ -333,7 +353,7 @@ public:
 			new (&thread_data[i]) thread_data_t;
 
 		// Start worker threads
-		thread_data[0].handle = std::thread(recursive_spawn_worker_thread, 0, num_threads);
+		std::thread(recursive_spawn_worker_thread, 0, num_threads).detach();
 	}
 
 	// Wait for all currently running tasks to finish
@@ -351,8 +371,7 @@ public:
 		}
 
 		// Wait for the threads to finish
-		for (int i = 0; i < num_threads; i++)
-			thread_data[i].handle.join();
+		shutdown_complete_event.wait();
 
 		// Flush the public queue
 		while (void* t = pop_public_queue())
