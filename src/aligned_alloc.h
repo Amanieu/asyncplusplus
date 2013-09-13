@@ -37,12 +37,12 @@ inline void* aligned_alloc(std::size_t size, std::size_t align)
 #ifdef _WIN32
 	void* ptr = _aligned_malloc(size, align);
 	if (!ptr)
-		throw std::bad_alloc();
+		LIBASYNC_THROW(std::bad_alloc());
 	return ptr;
 #else
 	void* result;
 	if (posix_memalign(&result, align, size))
-		throw std::bad_alloc();
+		LIBASYNC_THROW(std::bad_alloc());
 	else
 		return result;
 #endif

@@ -53,6 +53,28 @@
 # endif
 #endif
 
+// Support compiling without exceptions
+#ifndef LIBASYNC_NO_EXCEPTIONS
+# ifdef __clang__
+#  if !__has_feature(cxx_exceptions)
+#   define LIBASYNC_NO_EXCEPTIONS
+#  endif
+# elif defined(__GNUC__) && !defined(__EXCEPTIONS)
+#  define LIBASYNC_NO_EXCEPTIONS
+# endif
+#endif
+#ifdef LIBASYNC_NO_EXCEPTIONS
+# define LIBASYNC_THROW(...) abort()
+# define LIBASYNC_RETHROW() do {} while (false)
+# define LIBASYNC_TRY if (true)
+# define LIBASYNC_CATCH(...) else if (false)
+#else
+# define LIBASYNC_THROW(...) throw __VA_ARGS__
+# define LIBASYNC_RETHROW() throw
+# define LIBASYNC_TRY try
+# define LIBASYNC_CATCH(...) catch (__VA_ARGS__)
+#endif
+
 // Set this to override the default scheduler for newly created tasks.
 // async::threadpool_scheduler() is used by default.
 #ifndef LIBASYNC_DEFAULT_SCHEDULER

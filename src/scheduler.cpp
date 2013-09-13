@@ -329,11 +329,10 @@ public:
 		// Get the requested number of threads from the environment
 		// If that fails, use the number of CPUs in the system
 		const char *s = std::getenv("LIBASYNC_NUM_THREADS");
-		num_threads = std::thread::hardware_concurrency();
-		try {
-			if (s)
-				num_threads = std::stoi(s);
-		} catch (...) {}
+		if (s)
+			num_threads = atoi(s);
+		else
+			num_threads = std::thread::hardware_concurrency();
 
 		// Make sure thread count isn't something ridiculous
 		num_threads = std::max(num_threads, 1);

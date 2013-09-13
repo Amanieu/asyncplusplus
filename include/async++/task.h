@@ -47,7 +47,7 @@ protected:
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
-			throw std::invalid_argument("Use of empty task object");
+			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
 #endif
 
 		// If the task was canceled, throw the associated exception
@@ -60,7 +60,7 @@ protected:
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
-			throw std::invalid_argument("Use of empty task object");
+			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
 #endif
 
 		// Save a copy of internal_task because it might get moved into exec_func
@@ -110,7 +110,7 @@ public:
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
-			throw std::invalid_argument("Use of empty task object");
+			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
 #endif
 
 		internal_task->wait();
@@ -135,7 +135,7 @@ protected:
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
-			throw std::invalid_argument("Use of empty event_task object");
+			LIBASYNC_THROW(std::invalid_argument("Use of empty event_task object"));
 #endif
 
 		// Only allow setting the value once
@@ -143,11 +143,11 @@ protected:
 		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_acquire, std::memory_order_relaxed))
 			return false;
 
-		try {
+		LIBASYNC_TRY {
 			// Store the result and finish
 			static_cast<internal_task_type*>(internal_task.get())->set_result(std::forward<T>(result));
 			internal_task->finish();
-		} catch (...) {
+		} LIBASYNC_CATCH(...) {
 			// If the copy/move constructor of the result threw, save the exception.
 			// We could also return the exception to the caller, but this would
 			// cause race conditions.
@@ -190,13 +190,13 @@ public:
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
-			throw std::invalid_argument("Use of empty event_task object");
+			LIBASYNC_THROW(std::invalid_argument("Use of empty event_task object"));
 #endif
 
 		// Make sure this is only called once (ref_count == 1)
 		unsigned int expected = 1;
 		if (!internal_task->ref_count.compare_exchange_strong(expected, 2, std::memory_order_relaxed, std::memory_order_relaxed))
-			throw std::invalid_argument("event_task::get_task() called more than once");
+			LIBASYNC_THROW(std::invalid_argument("event_task::get_task() called more than once"));
 
 		// Ref count is now 2, no need to increment it again
 		task<Result> out;
@@ -210,7 +210,7 @@ public:
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
-			throw std::invalid_argument("Use of empty event_task object");
+			LIBASYNC_THROW(std::invalid_argument("Use of empty event_task object"));
 #endif
 
 		// Only allow setting the value once

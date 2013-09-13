@@ -117,23 +117,23 @@ template<int index, typename State> void when_all_variadic(when_all_state_variad
 template<int index, typename State, typename First, typename... T> void when_all_variadic(when_all_state_variadic<State>* state_ptr, First&& first, T&&... tasks)
 {
 	// Add a continuation to the task
-	try {
+	LIBASYNC_TRY {
 		first.then(inline_scheduler(), [state_ptr](typename std::decay<First>::type t) {
 			detail::ref_count_ptr<when_all_state_variadic<State>> state(state_ptr);
-			try {
+			LIBASYNC_TRY {
 				if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::TASK_COMPLETED)
 					std::get<index>(state->results) = detail::get_internal_task(t)->get_result(t);
 				else
 					state->event.set_exception(detail::get_internal_task(t)->except);
-			} catch (...) {
+			} LIBASYNC_CATCH(...) {
 				// If the assignment of the result threw, propagate the exception
 				state->event.set_exception(std::current_exception());
 			}
 		});
-	} catch (...) {
+	} LIBASYNC_CATCH(...) {
 		// Make sure we don't leak memory if then() throws
 		state_ptr->release(sizeof...(T) + 1);
-		throw;
+		LIBASYNC_RETHROW();
 	}
 
 	// Add continuations to rest of tasks
@@ -145,23 +145,23 @@ template<int index, typename State> void when_any_variadic(when_any_state<State>
 template<int index, typename State, typename First, typename... T> void when_any_variadic(when_any_state<State>* state_ptr, First&& first, T&&... tasks)
 {
 	// Add a continuation to the task
-	try {
+	LIBASYNC_TRY {
 		first.then(inline_scheduler(), [state_ptr](typename std::decay<First>::type t) {
 			detail::ref_count_ptr<when_any_state<State>> state(state_ptr);
-			try {
+			LIBASYNC_TRY {
 				if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::TASK_COMPLETED)
 					state->set(index, detail::get_internal_task(t)->get_result(t));
 				else
 					state->event.set_exception(detail::get_internal_task(t)->except);
-			} catch (...) {
+			} LIBASYNC_CATCH(...) {
 				// If the copy/move constructor of the result threw, propagate the exception
 				state->event.set_exception(std::current_exception());
 			}
 		});
-	} catch (...) {
+	} LIBASYNC_CATCH(...) {
 		// Make sure we don't leak memory if then() throws
 		state_ptr->release(sizeof...(T) + 1);
-		throw;
+		LIBASYNC_RETHROW();
 	}
 
 	// Add continuations to rest of tasks
@@ -190,23 +190,23 @@ template<typename Iter> task<typename detail::when_all_state_range<typename std:
 	// Add a continuation to each task to add its result to the shared state
 	// Last task sets the event result
 	for (std::size_t i = 0; begin != end; i++, ++begin) {
-		try {
+		LIBASYNC_TRY {
 			(*begin).then(inline_scheduler(), [state_ptr, i](task_type t) {
 				detail::ref_count_ptr<detail::when_all_state_range<result_type>> state(state_ptr);
-				try {
+				LIBASYNC_TRY {
 					if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::TASK_COMPLETED)
 						state->set(i, detail::get_internal_task(t)->get_result(t));
 					else
 						state->event.set_exception(detail::get_internal_task(t)->except);
-				} catch (...) {
+				} LIBASYNC_CATCH(...) {
 					// If the assignment of the result threw, propagate the exception
 					state->event.set_exception(std::current_exception());
 				}
 			});
-		} catch (...) {
+		} LIBASYNC_CATCH(...) {
 			// Make sure we don't leak memory if then() throws
 			state_ptr->release(std::distance(begin, end));
-			throw;
+			LIBASYNC_RETHROW();
 		}
 	}
 
@@ -222,7 +222,7 @@ template<typename Iter> task<typename detail::when_any_state<typename std::itera
 #ifndef NDEBUG
 	// Handle empty range
 	if (begin == end)
-		throw std::invalid_argument("when_any called with empty range");
+		LIBASYNC_THROW(std::invalid_argument("when_any called with empty range"));
 #endif
 
 	// Create shared state
@@ -231,23 +231,23 @@ template<typename Iter> task<typename detail::when_any_state<typename std::itera
 
 	// Add a continuation to each task to set the event. First one wins.
 	for (std::size_t i = 0; begin != end; i++, ++begin) {
-		try {
+		LIBASYNC_TRY {
 			(*begin).then(inline_scheduler(), [state_ptr, i](task_type t) {
 				detail::ref_count_ptr<detail::when_any_state<result_type>> state(state_ptr);
-				try {
+				LIBASYNC_TRY {
 					if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::TASK_COMPLETED)
 						state->set(i, detail::get_internal_task(t)->get_result(t));
 					else
 						state->event.set_exception(detail::get_internal_task(t)->except);
-				} catch (...) {
+				} LIBASYNC_CATCH(...) {
 					// If the copy/move constructor of the result threw, propagate the exception
 					state->event.set_exception(std::current_exception());
 				}
 			});
-		} catch (...) {
+		} LIBASYNC_CATCH(...) {
 			// Make sure we don't leak memory if then() throws
 			state_ptr->release(std::distance(begin, end));
-			throw;
+			LIBASYNC_RETHROW();
 		}
 	}
 

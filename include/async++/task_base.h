@@ -263,10 +263,14 @@ struct task_base: public ref_count_base<task_base> {
 	void wait_and_throw()
 	{
 		if (wait() == task_state::TASK_CANCELED) {
+#ifdef LIBASYNC_NO_EXCEPTIONS
+			abort();
+#else
 			if (except)
 				std::rethrow_exception(except);
 			else
 				throw task_canceled();
+#endif
 		}
 	}
 };
@@ -437,17 +441,17 @@ template<typename Func, typename Result> struct task_func: public task_result<Re
 		task_func* current_task = static_cast<task_func*>(t);
 		switch (op) {
 		case dispatch_op::execute:
-			try {
+			LIBASYNC_TRY {
 				// Dispatch to execution function
 				current_task->get_func()(current_task);
 
 				// If we successfully ran, destroy the function object so that it
 				// can release any references (shared_ptr) it holds.
 				current_task->destroy_func();
-			} catch (task_canceled) {
+			} LIBASYNC_CATCH(task_canceled) {
 				// Optimize task_canceled by encoding it as a null exception_ptr
 				current_task->cancel(nullptr);
-			} catch (...) {
+			} LIBASYNC_CATCH(...) {
 				current_task->cancel(std::current_exception());
 			}
 			break;
@@ -490,13 +494,13 @@ template<typename Result, typename Func, typename Child> struct unwrapped_func {
 	void operator()(Child child_task) const
 	{
 		// Forward completion state and result to parent task
-		try {
+		LIBASYNC_TRY {
 			if (get_internal_task(child_task)->state.load(std::memory_order_relaxed) == task_state::TASK_COMPLETED) {
 				static_cast<task_result<Result>*>(parent_task.get())->set_result(get_internal_task(child_task)->get_result(child_task));
 				parent_task->finish();
 			} else
 				static_cast<task_func<Func, Result>*>(parent_task.get())->cancel(get_internal_task(child_task)->except);
-		} catch (...) {
+		} LIBASYNC_CATCH(...) {
 			// If the copy/move constructor of the result threw, propagate the exception
 			static_cast<task_func<Func, Result>*>(parent_task.get())->cancel(std::current_exception());
 		}

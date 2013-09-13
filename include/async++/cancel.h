@@ -56,7 +56,7 @@ public:
 // prefered to another exception type because it is handled more efficiently.
 inline void cancel_current_task()
 {
-	throw task_canceled();
+	LIBASYNC_THROW(task_canceled());
 }
 
 // Interruption point, calls cancel_current_task if the specified token is set.
