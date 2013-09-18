@@ -68,11 +68,14 @@
 namespace async {
 namespace detail {
 
-// Current thread's index in the pool, -1 if not in the pool
-static thread_local int thread_id = -1;
+// Whether the current thread is part of the thread poo
+static thread_local bool thread_in_pool = false;
+
+// Current thread's index in the pool
+static thread_local std::size_t thread_id;
 
 // Number of threads in the pool
-static int num_threads;
+static std::size_t num_threads;
 
 // Per-thread data, aligned to cachelines to avoid false sharing
 struct CACHELINE_ALIGN thread_data_t {
@@ -86,7 +89,7 @@ struct CACHELINE_ALIGN thread_data_t {
 struct thread_data_deleter {
 	void operator()(thread_data_t* thread_data)
 	{
-		for (int i = 0; i < num_threads; i++)
+		for (std::size_t i = 0; i < num_threads; i++)
 			thread_data[i].~thread_data_t();
 		aligned_free(thread_data);
 	}
@@ -103,7 +106,7 @@ static std::unique_ptr<fifo_queue> public_queue;
 static bool shutdown = false;
 
 // Shutdown complete event
-static std::atomic<int> shutdown_num_threads;
+static std::atomic<std::size_t> shutdown_num_threads;
 static auto_reset_event shutdown_complete_event;
 
 // List of threads waiting for tasks to run
@@ -135,12 +138,12 @@ static void* pop_public_queue()
 static void* steal_task()
 {
 	// Make a list of victim thread ids and shuffle it
-	std::vector<int> victims(num_threads);
+	std::vector<std::size_t> victims(num_threads);
 	std::iota(victims.begin(), victims.end(), 0);
 	std::shuffle(victims.begin(), victims.end(), thread_data[thread_id].rng);
 
 	// Try to steal from another thread
-	for (int i: victims) {
+	for (std::size_t i: victims) {
 		// Don't try to steal from ourself
 		if (i == thread_id)
 			continue;
@@ -239,9 +242,10 @@ static void worker_thread_exit()
 }
 
 // Worker thread main loop
-static void worker_thread(int id)
+static void worker_thread(std::size_t id)
 {
 	// Save the thread id
+	thread_in_pool = true;
 	thread_id = id;
 
 	// Set the wait handler so threads from the pool do useful work while
@@ -303,14 +307,14 @@ static void worker_thread(int id)
 }
 
 // Recursive function to spawn all worker threads in parallel
-static void recursive_spawn_worker_thread(int index, int threads)
+static void recursive_spawn_worker_thread(std::size_t index, std::size_t threads)
 {
 	// If we are down to 1 thread, go to the worker main loop
 	if (threads == 1)
 		worker_thread(index);
 	else {
 		// Split thread range into 2 sub-ranges
-		int mid = index + threads / 2;
+		std::size_t mid = index + threads / 2;
 
 		// Spawn a thread for half of the range
 		std::thread(recursive_spawn_worker_thread, mid, threads - threads / 2).detach();
@@ -330,12 +334,13 @@ public:
 		// If that fails, use the number of CPUs in the system
 		const char *s = std::getenv("LIBASYNC_NUM_THREADS");
 		if (s)
-			num_threads = atoi(s);
+			num_threads = strtoul(s, nullptr, 10);
 		else
 			num_threads = std::thread::hardware_concurrency();
 
 		// Make sure thread count isn't something ridiculous
-		num_threads = std::max(num_threads, 1);
+		if (num_threads < 1)
+			num_threads = 1;
 
 		// Initialize shutdown_num_threads
 		shutdown_num_threads.store(num_threads, std::memory_order_relaxed);
@@ -348,7 +353,7 @@ public:
 
 		// Allocate per-thread data
 		thread_data.reset(static_cast<thread_data_t*>(aligned_alloc(sizeof(thread_data_t) * num_threads, std::alignment_of<thread_data_t>::value)));
-		for (int i = 0; i < num_threads; i++)
+		for (std::size_t i = 0; i < num_threads; i++)
 			new (&thread_data[i]) thread_data_t;
 
 		// Start worker threads
@@ -386,7 +391,7 @@ public:
 	virtual void schedule(task_run_handle t) override final
 	{
 		// Check if we are in the thread pool
-		if (thread_id != -1) {
+		if (thread_in_pool) {
 			// Push task onto our task queue
 			thread_data[thread_id].queue.push(std::move(t));
 		} else {

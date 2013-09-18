@@ -72,7 +72,7 @@ Result parallel_reduce(scheduler& sched, Range&& range, const Result& init, cons
 
 // Overloads with identity map function
 template<typename Range, typename Result, typename ReduceFunc>
-Result parallel_reduce(scheduler& sched, Range&& range, const Result& init, size_t grain, const ReduceFunc& reduce)
+Result parallel_reduce(scheduler& sched, Range&& range, const Result& init, std::size_t grain, const ReduceFunc& reduce)
 {
 	return async::parallel_reduce(sched, range, init, grain, detail::default_map(), reduce);
 }
@@ -84,7 +84,7 @@ Result parallel_reduce(scheduler& sched, Range&& range, const Result& init, cons
 
 // Overloads with default scheduler
 template<typename Range, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_reduce(Range&& range, const Result& init, size_t grain, const MapFunc& map, const ReduceFunc& reduce)
+Result parallel_reduce(Range&& range, const Result& init, std::size_t grain, const MapFunc& map, const ReduceFunc& reduce)
 {
 	return async::parallel_reduce(LIBASYNC_DEFAULT_SCHEDULER, range, init, grain, map, reduce);
 }
@@ -94,7 +94,7 @@ Result parallel_reduce(Range&& range, const Result& init, const MapFunc& map, co
 	return async::parallel_reduce(LIBASYNC_DEFAULT_SCHEDULER, range, init, map, reduce);
 }
 template<typename Range, typename Result, typename ReduceFunc>
-Result parallel_reduce(Range&& range, const Result& init, size_t grain, const ReduceFunc& reduce)
+Result parallel_reduce(Range&& range, const Result& init, std::size_t grain, const ReduceFunc& reduce)
 {
 	return async::parallel_reduce(LIBASYNC_DEFAULT_SCHEDULER, range, init, grain, reduce);
 }
@@ -106,7 +106,7 @@ Result parallel_reduce(Range&& range, const Result& init, const ReduceFunc& redu
 
 // Overloads with std::initializer_list
 template<typename T, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_reduce(scheduler& sched, std::initializer_list<T> range, const Result& init, size_t grain, const MapFunc& map, const ReduceFunc& reduce)
+Result parallel_reduce(scheduler& sched, std::initializer_list<T> range, const Result& init, std::size_t grain, const MapFunc& map, const ReduceFunc& reduce)
 {
 	return async::parallel_reduce(sched, async::make_range(range.begin(), range.end()), init, grain, map, reduce);
 }
@@ -116,7 +116,7 @@ Result parallel_reduce(scheduler& sched, std::initializer_list<T> range, const R
 	return async::parallel_reduce(sched, async::make_range(range.begin(), range.end()), init, map, reduce);
 }
 template<typename T, typename Result, typename ReduceFunc>
-Result parallel_reduce(scheduler& sched, std::initializer_list<T> range, const Result& init, size_t grain, const ReduceFunc& reduce)
+Result parallel_reduce(scheduler& sched, std::initializer_list<T> range, const Result& init, std::size_t grain, const ReduceFunc& reduce)
 {
 	return async::parallel_reduce(sched, async::make_range(range.begin(), range.end()), init, grain, reduce);
 }
@@ -126,7 +126,7 @@ Result parallel_reduce(scheduler& sched, std::initializer_list<T> range, const R
 	return async::parallel_reduce(sched, async::make_range(range.begin(), range.end()), init, reduce);
 }
 template<typename T, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_reduce(std::initializer_list<T> range, const Result& init, size_t grain, const MapFunc& map, const ReduceFunc& reduce)
+Result parallel_reduce(std::initializer_list<T> range, const Result& init, std::size_t grain, const MapFunc& map, const ReduceFunc& reduce)
 {
 	return async::parallel_reduce(async::make_range(range.begin(), range.end()), init, grain, map, reduce);
 }
@@ -136,7 +136,7 @@ Result parallel_reduce(std::initializer_list<T> range, const Result& init, const
 	return async::parallel_reduce(async::make_range(range.begin(), range.end()), init, map, reduce);
 }
 template<typename T, typename Result, typename ReduceFunc>
-Result parallel_reduce(std::initializer_list<T> range, const Result& init, size_t grain, const ReduceFunc& reduce)
+Result parallel_reduce(std::initializer_list<T> range, const Result& init, std::size_t grain, const ReduceFunc& reduce)
 {
 	return async::parallel_reduce(async::make_range(range.begin(), range.end()), init, grain, reduce);
 }

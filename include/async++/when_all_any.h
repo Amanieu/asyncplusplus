@@ -91,7 +91,7 @@ template<typename T> struct when_any_state: public ref_count_base<when_any_state
 	typedef std::pair<std::size_t, T> task_type;
 	event_task<task_type> event;
 
-	when_any_state(int count)
+	when_any_state(std::size_t count)
 		: ref_count_base<when_any_state<T>>(count) {}
 
 	template<typename U> void set(std::size_t i, U&& u)
@@ -113,8 +113,8 @@ template<> struct when_any_state<void>: public ref_count_base<when_any_state<voi
 };
 
 // Internal implementation of when_all for variadic arguments
-template<int index, typename State> void when_all_variadic(when_all_state_variadic<State>*) {}
-template<int index, typename State, typename First, typename... T> void when_all_variadic(when_all_state_variadic<State>* state_ptr, First&& first, T&&... tasks)
+template<std::size_t index, typename State> void when_all_variadic(when_all_state_variadic<State>*) {}
+template<std::size_t index, typename State, typename First, typename... T> void when_all_variadic(when_all_state_variadic<State>* state_ptr, First&& first, T&&... tasks)
 {
 	// Add a continuation to the task
 	LIBASYNC_TRY {
@@ -141,8 +141,8 @@ template<int index, typename State, typename First, typename... T> void when_all
 }
 
 // Internal implementation of when_any for variadic arguments
-template<int index, typename State> void when_any_variadic(when_any_state<State>*) {}
-template<int index, typename State, typename First, typename... T> void when_any_variadic(when_any_state<State>* state_ptr, First&& first, T&&... tasks)
+template<std::size_t index, typename State> void when_any_variadic(when_any_state<State>*) {}
+template<std::size_t index, typename State, typename First, typename... T> void when_any_variadic(when_any_state<State>* state_ptr, First&& first, T&&... tasks)
 {
 	// Add a continuation to the task
 	LIBASYNC_TRY {

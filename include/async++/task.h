@@ -91,7 +91,7 @@ public:
 	// Check if this task is not empty
 	bool valid() const
 	{
-		return bool(internal_task);
+		return internal_task != nullptr;
 	}
 
 	// Query whether the task has finished executing
@@ -194,7 +194,7 @@ public:
 #endif
 
 		// Make sure this is only called once (ref_count == 1)
-		unsigned int expected = 1;
+		std::size_t expected = 1;
 		if (!internal_task->ref_count.compare_exchange_strong(expected, 2, std::memory_order_relaxed, std::memory_order_relaxed))
 			LIBASYNC_THROW(std::invalid_argument("event_task::get_task() called more than once"));
 

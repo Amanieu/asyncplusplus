@@ -58,7 +58,7 @@ public:
 				// - Success => we were woken up, so return
 				// - EWOULDBLOCK => futex_val is not -1 anymore, so return
 				// - EINTR => spurious wakeup, try again
-				ret = syscall(SYS_futex, reinterpret_cast<int*>(&futex_val), FUTEX_WAIT_PRIVATE, -1, NULL);
+				ret = syscall(SYS_futex, reinterpret_cast<int*>(&futex_val), FUTEX_WAIT_PRIVATE, -1, nullptr);
 			} while (ret == -1 && errno == EINTR);
 		} else
 			std::atomic_thread_fence(std::memory_order_acquire);
@@ -91,7 +91,7 @@ class auto_reset_event {
 public:
 	auto_reset_event()
 	{
-		event = CreateEvent(NULL, FALSE, FALSE, NULL);
+		event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 	}
 	~auto_reset_event()
 	{

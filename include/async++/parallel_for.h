@@ -27,10 +27,18 @@ namespace async {
 namespace detail {
 
 // Automatically determine a grain size for a sequence length
-inline size_t auto_grain_size(size_t dist)
+inline std::size_t auto_grain_size(std::size_t dist)
 {
 	// Determine the grain size automatically using a heuristic
-	return std::max<std::size_t>(std::min<std::size_t>(2048, dist / (8 * std::thread::hardware_concurrency())), 1);
+	std::size_t num_threads = std::thread::hardware_concurrency();
+	if (num_threads == 0)
+		num_threads = 1;
+	std::size_t grain = dist / (8 * num_threads);
+	if (grain < 1)
+		grain = 1;
+	if (grain > 2048)
+		grain = 2048;
+	return grain;
 }
 
 } // namespace detail

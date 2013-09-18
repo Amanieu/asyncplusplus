@@ -27,16 +27,16 @@ namespace detail {
 
 // Reference-counted object base class
 template<typename T> struct ref_count_base {
-	std::atomic<unsigned int> ref_count;
+	std::atomic<std::size_t> ref_count;
 
 	// By default the reference count is initialized to 1
-	explicit ref_count_base(unsigned int count = 1): ref_count(count) {}
+	explicit ref_count_base(std::size_t count = 1): ref_count(count) {}
 
-	void add_ref(unsigned int count = 1)
+	void add_ref(std::size_t count = 1)
 	{
 		ref_count.fetch_add(count, std::memory_order_relaxed);
 	}
-	void release(unsigned int count = 1)
+	void release(std::size_t count = 1)
 	{
 		if (ref_count.fetch_sub(count, std::memory_order_release) == count) {
 			std::atomic_thread_fence(std::memory_order_acquire);
