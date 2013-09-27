@@ -22,9 +22,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
-#include <numeric>
 #include <random>
-#include <string>
 #include <thread>
 #include <type_traits>
 #include <vector>
