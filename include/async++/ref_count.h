@@ -121,6 +121,30 @@ public:
 	{
 		return p != nullptr;
 	}
+	friend bool operator==(const ref_count_ptr& a, const ref_count_ptr& b)
+	{
+		return a.p == b.p;
+	}
+	friend bool operator!=(const ref_count_ptr& a, const ref_count_ptr& b)
+	{
+		return a.p != b.p;
+	}
+	friend bool operator==(const ref_count_ptr& a, std::nullptr_t)
+	{
+		return a.p == nullptr;
+	}
+	friend bool operator!=(const ref_count_ptr& a, std::nullptr_t)
+	{
+		return a.p != nullptr;
+	}
+	friend bool operator==(std::nullptr_t, const ref_count_ptr& a)
+	{
+		return a.p == nullptr;
+	}
+	friend bool operator!=(std::nullptr_t, const ref_count_ptr& a)
+	{
+		return a.p != nullptr;
+	}
 };
 
 } // namespace detail
