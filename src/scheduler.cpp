@@ -442,18 +442,17 @@ public:
 // Thread scheduler implementation
 class thread_scheduler_impl: public scheduler {
 	struct thread_func {
-		// The parameter to a thread function can be passed as an lvalue or
-		// and rvalue depending on the implementation. We handle both cases here.
-		template<typename T> void operator()(T&& t) const
+		void operator()() const
 		{
 			t.run();
 		}
+		mutable task_run_handle t;
 	};
 
 public:
 	virtual void schedule(task_run_handle t) override final
 	{
-		std::thread(thread_func(), std::move(t)).detach();
+		std::thread(thread_func{std::move(t)}).detach();
 	}
 };
 
