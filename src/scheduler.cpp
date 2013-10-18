@@ -298,6 +298,12 @@ static void worker_thread(std::size_t id)
 				return;
 			}
 
+			// Check the public queue, for the same reason
+			if (void* t = pop_public_queue()) {
+				task_run_handle::from_void_ptr(t).run();
+				break;
+			}
+
 			// Wait for our event to be signaled when a task is scheduled
 			current_thread.event.wait();
 		}
