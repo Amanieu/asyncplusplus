@@ -255,13 +255,13 @@ template<typename Iter> task<typename detail::when_any_state<typename std::itera
 }
 
 // when_all wrapper accepting ranges
-template<typename T> auto when_all(T&& tasks) -> decltype(async::when_all(std::begin(std::forward<T>(tasks)), std::end(std::forward<T>(tasks))))
+template<typename T> decltype(async::when_all(std::begin(std::declval<T>()), std::end(std::declval<T>()))) when_all(T&& tasks)
 {
 	return async::when_all(std::begin(std::forward<T>(tasks)), std::end(std::forward<T>(tasks)));
 }
 
 // when_any wrapper accepting ranges
-template<typename T> auto when_any(T&& tasks) -> decltype(async::when_any(std::begin(std::forward<T>(tasks)), std::end(std::forward<T>(tasks))))
+template<typename T> decltype(async::when_any(std::begin(std::declval<T>()), std::end(std::declval<T>()))) when_any(T&& tasks)
 {
 	return async::when_any(std::begin(std::forward<T>(tasks)), std::end(std::forward<T>(tasks)));
 }

@@ -483,7 +483,7 @@ task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn
 	return out;
 }
 template<typename Func>
-auto spawn(Func&& f) -> decltype(async::spawn(LIBASYNC_DEFAULT_SCHEDULER, std::forward<Func>(f)))
+decltype(async::spawn(LIBASYNC_DEFAULT_SCHEDULER, std::declval<Func>())) spawn(Func&& f)
 {
 	return async::spawn(LIBASYNC_DEFAULT_SCHEDULER, std::forward<Func>(f));
 }
