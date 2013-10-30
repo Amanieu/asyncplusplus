@@ -26,7 +26,8 @@ namespace async {
 namespace detail {
 
 // when_all shared state for ranges
-template<typename T> struct when_all_state_range: public ref_count_base<when_all_state_range<T>> {
+template<typename T>
+struct when_all_state_range: public ref_count_base<when_all_state_range<T>> {
 	typedef std::vector<T> task_type;
 	task_type results;
 	event_task<task_type> event;
@@ -40,7 +41,8 @@ template<typename T> struct when_all_state_range: public ref_count_base<when_all
 		event.set(std::move(results));
 	}
 
-	template<typename U> void set(std::size_t i, U&& u)
+	template<typename U>
+	void set(std::size_t i, U&& u)
 	{
 		results[i] = std::forward<U>(u);
 	}
@@ -50,7 +52,8 @@ template<typename T> struct when_all_state_range: public ref_count_base<when_all
 		return async::make_task(task_type());
 	}
 };
-template<> struct when_all_state_range<void>: public ref_count_base<when_all_state_range<void>> {
+template<>
+struct when_all_state_range<void>: public ref_count_base<when_all_state_range<void>> {
 	typedef void task_type;
 	event_task<void> event;
 
@@ -72,7 +75,8 @@ template<> struct when_all_state_range<void>: public ref_count_base<when_all_sta
 };
 
 // when_all shared state for varidic arguments
-template<typename Tuple> struct when_all_state_variadic: public ref_count_base<when_all_state_variadic<Tuple>> {
+template<typename Tuple>
+struct when_all_state_variadic: public ref_count_base<when_all_state_variadic<Tuple>> {
 	Tuple results;
 	event_task<Tuple> event;
 
@@ -87,19 +91,22 @@ template<typename Tuple> struct when_all_state_variadic: public ref_count_base<w
 };
 
 // when_any shared state
-template<typename T> struct when_any_state: public ref_count_base<when_any_state<T>> {
+template<typename T>
+struct when_any_state: public ref_count_base<when_any_state<T>> {
 	typedef std::pair<std::size_t, T> task_type;
 	event_task<task_type> event;
 
 	when_any_state(std::size_t count)
 		: ref_count_base<when_any_state<T>>(count) {}
 
-	template<typename U> void set(std::size_t i, U&& u)
+	template<typename U>
+	void set(std::size_t i, U&& u)
 	{
 		event.set(std::make_pair(i, std::forward<U>(u)));
 	}
 };
-template<> struct when_any_state<void>: public ref_count_base<when_any_state<void>> {
+template<>
+struct when_any_state<void>: public ref_count_base<when_any_state<void>> {
 	typedef std::size_t task_type;
 	event_task<task_type> event;
 
@@ -113,8 +120,10 @@ template<> struct when_any_state<void>: public ref_count_base<when_any_state<voi
 };
 
 // Internal implementation of when_all for variadic arguments
-template<std::size_t index, typename State> void when_all_variadic(when_all_state_variadic<State>*) {}
-template<std::size_t index, typename State, typename First, typename... T> void when_all_variadic(when_all_state_variadic<State>* state_ptr, First&& first, T&&... tasks)
+template<std::size_t index, typename State>
+void when_all_variadic(when_all_state_variadic<State>*) {}
+template<std::size_t index, typename State, typename First, typename... T>
+void when_all_variadic(when_all_state_variadic<State>* state_ptr, First&& first, T&&... tasks)
 {
 	// Add a continuation to the task
 	LIBASYNC_TRY {
@@ -141,8 +150,10 @@ template<std::size_t index, typename State, typename First, typename... T> void 
 }
 
 // Internal implementation of when_any for variadic arguments
-template<std::size_t index, typename State> void when_any_variadic(when_any_state<State>*) {}
-template<std::size_t index, typename State, typename First, typename... T> void when_any_variadic(when_any_state<State>* state_ptr, First&& first, T&&... tasks)
+template<std::size_t index, typename State>
+void when_any_variadic(when_any_state<State>*) {}
+template<std::size_t index, typename State, typename First, typename... T>
+void when_any_variadic(when_any_state<State>* state_ptr, First&& first, T&&... tasks)
 {
 	// Add a continuation to the task
 	LIBASYNC_TRY {
@@ -174,7 +185,8 @@ template<std::size_t index, typename State, typename First, typename... T> void 
 typedef detail::fake_void void_;
 
 // Combine a set of tasks into one task which is signaled when all specified tasks finish
-template<typename Iter> task<typename detail::when_all_state_range<typename std::iterator_traits<Iter>::value_type::result_type>::task_type> when_all(Iter begin, Iter end)
+template<typename Iter>
+task<typename detail::when_all_state_range<typename std::iterator_traits<Iter>::value_type::result_type>::task_type> when_all(Iter begin, Iter end)
 {
 	typedef typename std::iterator_traits<Iter>::value_type task_type;
 	typedef typename task_type::result_type result_type;
@@ -214,7 +226,8 @@ template<typename Iter> task<typename detail::when_all_state_range<typename std:
 }
 
 // Combine a set of tasks into one task which is signaled when one of the tasks finishes
-template<typename Iter> task<typename detail::when_any_state<typename std::iterator_traits<Iter>::value_type::result_type>::task_type> when_any(Iter begin, Iter end)
+template<typename Iter>
+task<typename detail::when_any_state<typename std::iterator_traits<Iter>::value_type::result_type>::task_type> when_any(Iter begin, Iter end)
 {
 	typedef typename std::iterator_traits<Iter>::value_type task_type;
 	typedef typename task_type::result_type result_type;
@@ -255,19 +268,22 @@ template<typename Iter> task<typename detail::when_any_state<typename std::itera
 }
 
 // when_all wrapper accepting ranges
-template<typename T> decltype(async::when_all(std::begin(std::declval<T>()), std::end(std::declval<T>()))) when_all(T&& tasks)
+template<typename T>
+decltype(async::when_all(std::begin(std::declval<T>()), std::end(std::declval<T>()))) when_all(T&& tasks)
 {
 	return async::when_all(std::begin(std::forward<T>(tasks)), std::end(std::forward<T>(tasks)));
 }
 
 // when_any wrapper accepting ranges
-template<typename T> decltype(async::when_any(std::begin(std::declval<T>()), std::end(std::declval<T>()))) when_any(T&& tasks)
+template<typename T>
+decltype(async::when_any(std::begin(std::declval<T>()), std::end(std::declval<T>()))) when_any(T&& tasks)
 {
 	return async::when_any(std::begin(std::forward<T>(tasks)), std::end(std::forward<T>(tasks)));
 }
 
 // when_all with variadic arguments
-template<typename First, typename... T> task<std::tuple<typename detail::void_to_fake_void<typename std::decay<First>::type::result_type>::type, typename detail::void_to_fake_void<typename std::decay<T>::type::result_type>::type...>> when_all(First&& first, T&&... tasks)
+template<typename First, typename... T>
+task<std::tuple<typename detail::void_to_fake_void<typename std::decay<First>::type::result_type>::type, typename detail::void_to_fake_void<typename std::decay<T>::type::result_type>::type...>> when_all(First&& first, T&&... tasks)
 {
 	typedef std::tuple<typename detail::void_to_fake_void<typename std::decay<First>::type::result_type>::type, typename detail::void_to_fake_void<typename std::decay<T>::type::result_type>::type...> result_type;
 
@@ -282,7 +298,8 @@ template<typename First, typename... T> task<std::tuple<typename detail::void_to
 }
 
 // when_any with variadic arguments
-template<typename First, typename... T> task<typename detail::when_any_state<typename std::decay<First>::type::result_type>::task_type> when_any(First&& first, T&&... tasks)
+template<typename First, typename... T>
+task<typename detail::when_any_state<typename std::decay<First>::type::result_type>::task_type> when_any(First&& first, T&&... tasks)
 {
 	typedef typename std::decay<First>::type::result_type result_type;
 

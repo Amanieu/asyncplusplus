@@ -26,11 +26,13 @@ namespace async {
 namespace detail {
 
 // Reference-counted object base class
-template<typename T> struct ref_count_base {
+template<typename T>
+struct ref_count_base {
 	std::atomic<std::size_t> ref_count;
 
 	// By default the reference count is initialized to 1
-	explicit ref_count_base(std::size_t count = 1): ref_count(count) {}
+	explicit ref_count_base(std::size_t count = 1)
+		: ref_count(count) {}
 
 	void add_ref(std::size_t count = 1)
 	{
@@ -50,16 +52,20 @@ template<typename T> struct ref_count_base {
 };
 
 // Pointer to reference counted object, based on boost::intrusive_ptr
-template<typename T> class ref_count_ptr {
+template<typename T>
+class ref_count_ptr {
 	T* p;
 
 public:
 	// Note that this doesn't increment the reference count, instead it takes
 	// ownership of a pointer which you already own a reference to.
-	explicit ref_count_ptr(T* t): p(t) {}
+	explicit ref_count_ptr(T* t)
+		: p(t) {}
 
-	ref_count_ptr(): p(nullptr) {}
-	ref_count_ptr(std::nullptr_t): p(nullptr) {}
+	ref_count_ptr()
+		: p(nullptr) {}
+	ref_count_ptr(std::nullptr_t)
+		: p(nullptr) {}
 	ref_count_ptr(const ref_count_ptr& other)
 		: p(other.p)
 	{

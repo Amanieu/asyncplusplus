@@ -29,7 +29,8 @@ namespace detail {
 // Recursively split the arguments so tasks are spawned in parallel
 template<std::size_t Start, std::size_t Count>
 struct parallel_invoke_internal {
-	template<typename Tuple> static void run(scheduler& sched, const Tuple& args)
+	template<typename Tuple>
+	static void run(scheduler& sched, const Tuple& args)
 	{
 		auto&& t = async::local_spawn(sched, [&sched, &args] {
 			parallel_invoke_internal<Start + Count / 2, Count - Count / 2>::run(sched, args);
@@ -40,7 +41,8 @@ struct parallel_invoke_internal {
 };
 template<std::size_t Index>
 struct parallel_invoke_internal<Index, 1> {
-	template<typename Tuple> static void run(scheduler&, const Tuple& args)
+	template<typename Tuple>
+	static void run(scheduler&, const Tuple& args)
 	{
 		// Make sure to preserve the rvalue/lvalue-ness of the original parameter
 		std::forward<typename std::tuple_element<Index, Tuple>::type>(std::get<Index>(args))();
@@ -48,7 +50,8 @@ struct parallel_invoke_internal<Index, 1> {
 };
 template<std::size_t Index>
 struct parallel_invoke_internal<Index, 0> {
-	template<typename Tuple> static void run(scheduler&, const Tuple&) {}
+	template<typename Tuple>
+	static void run(scheduler&, const Tuple&) {}
 };
 
 } // namespace detail

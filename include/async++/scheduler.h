@@ -34,8 +34,11 @@ class task_wait_handle {
 		: handle(t) {}
 
 	// Execution function for use by wait handlers
-	template<typename Func> struct wait_exec_func: private detail::func_base<Func> {
-		template<typename F> explicit wait_exec_func(F&& f): detail::func_base<Func>(std::forward<F>(f)) {}
+	template<typename Func>
+	struct wait_exec_func: private detail::func_base<Func> {
+		template<typename F>
+		explicit wait_exec_func(F&& f)
+			: detail::func_base<Func>(std::forward<F>(f)) {}
 		void operator()(detail::task_base*)
 		{
 			// Just call the function directly, all this wrapper does is remove
@@ -61,7 +64,8 @@ public:
 	}
 
 	// Queue a function to be executed when the task has finished executing.
-	template<typename Func> void on_finish(Func&& func)
+	template<typename Func>
+	void on_finish(Func&& func)
 	{
 		detail::task_ptr cont(new detail::task_func<wait_exec_func<typename std::decay<Func>::type>, detail::fake_void>(std::forward<Func>(func)));
 		cont->sched = &inline_scheduler();

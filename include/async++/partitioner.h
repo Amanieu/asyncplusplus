@@ -33,8 +33,10 @@ namespace detail {
 // should return an empty range.
 
 // Detect whether a range is a partitioner
-template<typename T, typename = void> struct is_partitioner: std::false_type {};
-template<typename T> struct is_partitioner<T, decltype((void)std::declval<T>().split())>: std::true_type {};
+template<typename T, typename = void>
+struct is_partitioner: public std::false_type {};
+template<typename T>
+struct is_partitioner<T, decltype((void)std::declval<T>().split())>: public std::true_type {};
 
 // Automatically determine a grain size for a sequence length
 inline std::size_t auto_grain_size(std::size_t dist)
@@ -51,7 +53,8 @@ inline std::size_t auto_grain_size(std::size_t dist)
 	return grain;
 }
 
-template<typename Iter> class static_partitioner_impl {
+template<typename Iter>
+class static_partitioner_impl {
 public:
 	static_partitioner_impl(Iter begin, Iter end, std::size_t grain)
 		: iter_begin(begin), iter_end(end), grain(grain) {}

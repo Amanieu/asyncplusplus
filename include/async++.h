@@ -89,8 +89,10 @@
 // Some forward declarations
 namespace async {
 
-template<typename Result> class task;
-template<typename Result> class shared_task;
+template<typename Result>
+class task;
+template<typename Result>
+class shared_task;
 
 // Exception thrown by cancel_current_task()
 struct LIBASYNC_EXPORT task_canceled {};

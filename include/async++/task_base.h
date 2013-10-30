@@ -184,7 +184,8 @@ struct task_base: public ref_count_base<task_base> {
 
 	// Run all of the task's continuations after it has completed or canceled.
 	// The list of continuations is then emptied.
-	template<bool cancel> void run_continuations()
+	template<bool cancel>
+	void run_continuations()
 	{
 		// Wait for any threads which may be adding a continuation. The lock is
 		// not needed afterwards because any future continuations are run
@@ -276,7 +277,8 @@ struct task_base: public ref_count_base<task_base> {
 };
 
 // Result type-specific task object
-template<typename Result> struct task_result: public task_base {
+template<typename Result>
+struct task_result: public task_base {
 	typename std::aligned_storage<sizeof(Result), std::alignment_of<Result>::value>::type result;
 
 	// Set the dispatch function
@@ -285,18 +287,21 @@ template<typename Result> struct task_result: public task_base {
 		dispatch = cleanup;
 	}
 
-	template<typename T> void set_result(T&& t)
+	template<typename T>
+	void set_result(T&& t)
 	{
 		new(&result) Result(std::forward<T>(t));
 	}
 
 	// Return a result using an lvalue or rvalue reference depending on the task
 	// type. The task parameter is not used, it is just there for overload resolution.
-	template<typename T> Result&& get_result(const task<T>&)
+	template<typename T>
+	Result&& get_result(const task<T>&)
 	{
 		return std::move(*reinterpret_cast<Result*>(&result));
 	}
-	template<typename T> const Result& get_result(const shared_task<T>&)
+	template<typename T>
+	const Result& get_result(const shared_task<T>&)
 	{
 		return *reinterpret_cast<Result*>(&result);
 	}
@@ -315,7 +320,8 @@ template<typename Result> struct task_result: public task_base {
 };
 
 // Specialization for references
-template<typename Result> struct task_result<Result&>: public task_base {
+template<typename Result>
+struct task_result<Result&>: public task_base {
 	// Store as pointer internally
 	Result* result;
 
@@ -330,11 +336,13 @@ template<typename Result> struct task_result<Result&>: public task_base {
 		result = std::addressof(obj);
 	}
 
-	template<typename T> Result& get_result(const task<T>&)
+	template<typename T>
+	Result& get_result(const task<T>&)
 	{
 		return *result;
 	}
-	template<typename T> Result& get_result(const shared_task<T>&)
+	template<typename T>
+	Result& get_result(const shared_task<T>&)
 	{
 		return *result;
 	}
@@ -344,7 +352,8 @@ template<typename Result> struct task_result<Result&>: public task_base {
 };
 
 // Specialization for void
-template<> struct task_result<fake_void>: public task_base {
+template<>
+struct task_result<fake_void>: public task_base {
 	void set_result(fake_void) {}
 
 	// Set the dispatch function
@@ -355,11 +364,13 @@ template<> struct task_result<fake_void>: public task_base {
 
 	// Get the result as fake_void so that it can be passed to set_result and
 	// continuations
-	template<typename T> fake_void get_result(const task<T>&)
+	template<typename T>
+	fake_void get_result(const task<T>&)
 	{
 		return fake_void();
 	}
-	template<typename T> fake_void get_result(const shared_task<T>&)
+	template<typename T>
+	fake_void get_result(const shared_task<T>&)
 	{
 		return fake_void();
 	}
@@ -369,18 +380,22 @@ template<> struct task_result<fake_void>: public task_base {
 };
 
 // Class to hold a function object, with empty base class optimization
-template<typename Func, typename = void> struct func_base {
+template<typename Func, typename = void>
+struct func_base {
 	Func func;
 
-	template<typename F> explicit func_base(F&& f)
+	template<typename F>
+	explicit func_base(F&& f)
 		: func(std::forward<F>(f)) {}
 	Func& get_func()
 	{
 		return func;
 	}
 };
-template<typename Func> struct func_base<Func, typename std::enable_if<std::is_empty<Func>::value>::type> {
-	template<typename F> explicit func_base(F&& f)
+template<typename Func>
+struct func_base<Func, typename std::enable_if<std::is_empty<Func>::value>::type> {
+	template<typename F>
+	explicit func_base(F&& f)
 	{
 		new(this) Func(std::forward<F>(f));
 	}
@@ -395,14 +410,16 @@ template<typename Func> struct func_base<Func, typename std::enable_if<std::is_e
 };
 
 // Class to hold a function object and initialize/destroy it at any time
-template<typename Func, typename = void> struct func_holder {
+template<typename Func, typename = void>
+struct func_holder {
 	typename std::aligned_storage<sizeof(Func), std::alignment_of<Func>::value>::type func;
 
 	Func& get_func()
 	{
 		return *reinterpret_cast<Func*>(&func);
 	}
-	template<typename... Args> void init_func(Args&&... args)
+	template<typename... Args>
+	void init_func(Args&&... args)
 	{
 		new(&func) Func(std::forward<Args>(args)...);
 	}
@@ -411,12 +428,14 @@ template<typename Func, typename = void> struct func_holder {
 		get_func().~Func();
 	}
 };
-template<typename Func> struct func_holder<Func, typename std::enable_if<std::is_empty<Func>::value>::type> {
+template<typename Func>
+struct func_holder<Func, typename std::enable_if<std::is_empty<Func>::value>::type> {
 	Func& get_func()
 	{
 		return *reinterpret_cast<Func*>(this);
 	}
-	template<typename... Args> void init_func(Args&&... args)
+	template<typename... Args>
+	void init_func(Args&&... args)
 	{
 		new(this) Func(std::forward<Args>(args)...);
 	}
@@ -428,8 +447,10 @@ template<typename Func> struct func_holder<Func, typename std::enable_if<std::is
 
 // Task object with an associated function object
 // Using private inheritance so empty Func doesn't take up space
-template<typename Func, typename Result> struct task_func: public task_result<Result>, private func_holder<Func> {
-	template<typename... Args> explicit task_func(Args&&... args)
+template<typename Func, typename Result>
+struct task_func: public task_result<Result>, private func_holder<Func> {
+	template<typename... Args>
+	explicit task_func(Args&&... args)
 	{
 		this->init_func(std::forward<Args>(args)...);
 		this->dispatch = dispatch_func;
@@ -483,14 +504,17 @@ template<typename Func, typename Result> struct task_func: public task_result<Re
 // Helper function to access the internal_task member of a task object, which
 // avoids us having to specify half of the functions in the detail namespace
 // as friend. Also, internal_task is downcast to the appropriate task_result<>.
-template<typename Task> typename Task::internal_task_type* get_internal_task(const Task& t)
+template<typename Task>
+typename Task::internal_task_type* get_internal_task(const Task& t)
 {
 	return static_cast<typename Task::internal_task_type*>(t.internal_task.get());
 }
 
 // Common code for task unwrapping
-template<typename Result, typename Func, typename Child> struct unwrapped_func {
-	explicit unwrapped_func(task_ptr t): parent_task(std::move(t)) {}
+template<typename Result, typename Func, typename Child>
+struct unwrapped_func {
+	explicit unwrapped_func(task_ptr t)
+		: parent_task(std::move(t)) {}
 	void operator()(Child child_task) const
 	{
 		// Forward completion state and result to parent task
@@ -517,16 +541,22 @@ void unwrapped_finish(task_base* parent_base, Child child_task)
 
 // Execution functions for root tasks:
 // - With and without task unwraping
-template<typename Result, typename Func, bool Unwrap> struct root_exec_func: private func_base<Func> {
-	template<typename F> explicit root_exec_func(F&& f): func_base<Func>(std::forward<F>(f)) {}
+template<typename Result, typename Func, bool Unwrap>
+struct root_exec_func: private func_base<Func> {
+	template<typename F>
+	explicit root_exec_func(F&& f)
+		: func_base<Func>(std::forward<F>(f)) {}
 	void operator()(task_base* t)
 	{
 		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func())));
 		t->finish();
 	}
 };
-template<typename Result, typename Func> struct root_exec_func<Result, Func, true>: private func_base<Func> {
-	template<typename F> explicit root_exec_func(F&& f): func_base<Func>(std::forward<F>(f)) {}
+template<typename Result, typename Func>
+struct root_exec_func<Result, Func, true>: private func_base<Func> {
+	template<typename F>
+	explicit root_exec_func(F&& f)
+		: func_base<Func>(std::forward<F>(f)) {}
 	void operator()(task_base* t)
 	{
 		unwrapped_finish<Result, root_exec_func>(t, std::move(std::move(this->get_func()))());
@@ -536,8 +566,11 @@ template<typename Result, typename Func> struct root_exec_func<Result, Func, tru
 // Execution functions for continuation tasks:
 // - With and without task unwraping
 // - For value-based and task-based continuations
-template<typename Parent, typename Result, typename Func, bool ValueCont, bool Unwrap> struct continuation_exec_func: private func_base<Func> {
-	template<typename F, typename P> continuation_exec_func(F&& f, P&& p): func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
+template<typename Parent, typename Result, typename Func, bool ValueCont, bool Unwrap>
+struct continuation_exec_func: private func_base<Func> {
+	template<typename F, typename P>
+	continuation_exec_func(F&& f, P&& p)
+		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
 		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), std::move(this->parent)));
@@ -545,8 +578,11 @@ template<typename Parent, typename Result, typename Func, bool ValueCont, bool U
 	}
 	Parent parent;
 };
-template<typename Parent, typename Result, typename Func> struct continuation_exec_func<Parent, Result, Func, true, false>: private func_base<Func> {
-	template<typename F, typename P> continuation_exec_func(F&& f, P&& p): func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
+template<typename Parent, typename Result, typename Func>
+struct continuation_exec_func<Parent, Result, Func, true, false>: private func_base<Func> {
+	template<typename F, typename P>
+	continuation_exec_func(F&& f, P&& p)
+		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
 		auto&& result = get_internal_task(parent)->get_result(parent);
@@ -555,8 +591,11 @@ template<typename Parent, typename Result, typename Func> struct continuation_ex
 	}
 	Parent parent;
 };
-template<typename Parent, typename Result, typename Func> struct continuation_exec_func<Parent, Result, Func, false, true>: private func_base<Func> {
-	template<typename F, typename P> continuation_exec_func(F&& f, P&& p): func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
+template<typename Parent, typename Result, typename Func>
+struct continuation_exec_func<Parent, Result, Func, false, true>: private func_base<Func> {
+	template<typename F, typename P>
+	continuation_exec_func(F&& f, P&& p)
+		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
 		typedef typename detail::void_to_fake_void<typename Parent::result_type>::type internal_result;
@@ -564,8 +603,11 @@ template<typename Parent, typename Result, typename Func> struct continuation_ex
 	}
 	Parent parent;
 };
-template<typename Parent, typename Result, typename Func> struct continuation_exec_func<Parent, Result, Func, true, true>: private func_base<Func> {
-	template<typename F, typename P> continuation_exec_func(F&& f, P&& p): func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
+template<typename Parent, typename Result, typename Func>
+struct continuation_exec_func<Parent, Result, Func, true, true>: private func_base<Func> {
+	template<typename F, typename P>
+	continuation_exec_func(F&& f, P&& p)
+		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
 		auto&& result = get_internal_task(parent)->get_result(parent);

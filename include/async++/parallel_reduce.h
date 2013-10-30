@@ -28,7 +28,8 @@ namespace detail {
 
 // Default map function which simply passes its parameter through unmodified
 struct default_map {
-	template<typename T> T&& operator()(T&& x) const
+	template<typename T>
+	T&& operator()(T&& x) const
 	{
 		return std::forward<T>(x);
 	}

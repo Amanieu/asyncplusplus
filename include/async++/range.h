@@ -25,7 +25,8 @@
 namespace async {
 
 // Range type representing a pair of iterators
-template<typename Iter> class range {
+template<typename Iter>
+class range {
 	Iter iter_begin, iter_end;
 
 public:
@@ -44,13 +45,15 @@ public:
 };
 
 // Construct a range from 2 iterators
-template<typename Iter> range<Iter> make_range(Iter begin, Iter end)
+template<typename Iter>
+range<Iter> make_range(Iter begin, Iter end)
 {
 	return {begin, end};
 }
 
 // A range of integers
-template<typename T> class int_range {
+template<typename T>
+class int_range {
 	T value_begin, value_end;
 
 	static_assert(std::is_integral<T>::value, "int_range can only be used with integral types");

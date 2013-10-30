@@ -26,7 +26,8 @@ namespace async {
 namespace detail {
 
 // Common code for task and shared_task
-template<typename Result> class basic_task {
+template<typename Result>
+class basic_task {
 protected:
 	// Reference counted internal task object
 	detail::task_ptr internal_task;
@@ -38,8 +39,10 @@ protected:
 	typedef task_result<internal_result> internal_task_type;
 
 	// Friend access
-	template<typename T> friend class basic_task;
-	template<typename T> friend typename T::internal_task_type* get_internal_task(const T& t);
+	template<typename T>
+	friend class basic_task;
+	template<typename T>
+	friend typename T::internal_task_type* get_internal_task(const T& t);
 
 	// Common code for get()
 	void get_internal() const
@@ -55,7 +58,8 @@ protected:
 	}
 
 	// Common code for then()
-	template<typename Func, typename Parent> typename continuation_traits<Parent, Func>::task_type then_internal(scheduler& sched, Func&& f, Parent&& parent) const
+	template<typename Func, typename Parent>
+	typename continuation_traits<Parent, Func>::task_type then_internal(scheduler& sched, Func&& f, Parent&& parent) const
 	{
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects
@@ -118,7 +122,8 @@ public:
 };
 
 // Common code for event_task specializations
-template<typename Result> class basic_event {
+template<typename Result>
+class basic_event {
 protected:
 	// Reference counted internal task object
 	detail::task_ptr internal_task;
@@ -130,7 +135,8 @@ protected:
 	typedef detail::task_result<internal_result> internal_task_type;
 
 	// Common code for set()
-	template<typename T> bool set_internal(T&& result) const
+	template<typename T>
+	bool set_internal(T&& result) const
 	{
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects
@@ -232,11 +238,14 @@ public:
 
 } // namespace detail
 
-template<typename Result> class task: public detail::basic_task<Result> {
+template<typename Result>
+class task: public detail::basic_task<Result> {
 	// Friend access for make_task, spawn and event_task::get_task
-	template<typename T> friend task<typename std::decay<T>::type> make_task(T&& value);
+	template<typename T>
+	friend task<typename std::decay<T>::type> make_task(T&& value);
 	friend task<void> make_task();
-	template<typename Func> friend task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn(scheduler& sched, Func&& f);
+	template<typename Func>
+	friend task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn(scheduler& sched, Func&& f);
 	friend class detail::basic_event<Result>;
 
 	// Movable but not copyable
@@ -284,7 +293,8 @@ public:
 	}
 };
 
-template<typename Result> class shared_task: public detail::basic_task<Result> {
+template<typename Result>
+class shared_task: public detail::basic_task<Result> {
 	// Friend access for task::share
 	friend class task<Result>;
 
@@ -322,7 +332,8 @@ public:
 };
 
 // Special task type which can be triggered manually rather than when a function executes.
-template<typename Result> class event_task : public detail::basic_event<Result> {
+template<typename Result>
+class event_task: public detail::basic_event<Result> {
 	// Movable but not copyable
 	event_task(const event_task&);
 	event_task& operator=(const event_task& other);
@@ -349,7 +360,8 @@ public:
 };
 
 // Specialization for references
-template<typename Result> class event_task<Result&>: public detail::basic_event<Result&> {
+template<typename Result>
+class event_task<Result&>: public detail::basic_event<Result&> {
 	// Movable but not copyable
 	event_task(const event_task&);
 	event_task& operator=(const event_task& other);
@@ -372,7 +384,8 @@ public:
 };
 
 // Specialization for void
-template<> class event_task<void>: public detail::basic_event<void> {
+template<>
+class event_task<void>: public detail::basic_event<void> {
 	// Movable but not copyable
 	event_task(const event_task&);
 	event_task& operator=(const event_task& other);
@@ -395,7 +408,8 @@ public:
 };
 
 // Task type returned by local_spawn()
-template<typename Func> class local_task {
+template<typename Func>
+class local_task {
 	// Task result type
 	typedef typename detail::remove_task<decltype(std::declval<Func>()())>::type result_type;
 	typedef typename detail::void_to_fake_void<result_type>::type internal_result;
@@ -408,8 +422,10 @@ template<typename Func> class local_task {
 	detail::task_func<exec_func, internal_result> internal_task;
 
 	// Friend access for local_spawn
-	template<typename F> friend local_task<F> local_spawn(scheduler& sched, F&& f);
-	template<typename F> friend local_task<F> local_spawn(F&& f);
+	template<typename F>
+	friend local_task<F> local_spawn(scheduler& sched, F&& f);
+	template<typename F>
+	friend local_task<F> local_spawn(F&& f);
 
 	// Constructor, used by local_spawn
 	local_task(scheduler& sched, Func&& f)
@@ -489,7 +505,8 @@ decltype(async::spawn(LIBASYNC_DEFAULT_SCHEDULER, std::declval<Func>())) spawn(F
 }
 
 // Create a completed task containing a value
-template<typename T> task<typename std::decay<T>::type> make_task(T&& value)
+template<typename T>
+task<typename std::decay<T>::type> make_task(T&& value)
 {
 	task<typename std::decay<T>::type> out;
 

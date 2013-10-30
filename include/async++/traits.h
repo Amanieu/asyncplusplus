@@ -27,47 +27,64 @@ namespace detail {
 
 // Pseudo-void type: it takes up no space but can be moved and copied
 struct fake_void {};
-template<typename T> struct void_to_fake_void {
+template<typename T>
+struct void_to_fake_void {
 	typedef T type;
 };
-template<> struct void_to_fake_void<void> {
+template<>
+struct void_to_fake_void<void> {
 	typedef fake_void type;
 };
-template<typename T> T fake_void_to_void(T&& x)
+template<typename T>
+T fake_void_to_void(T&& x)
 {
 	return std::forward<T>(x);
 }
 inline void fake_void_to_void(fake_void) {}
 
 // Check if type is a task type, used to detect task unwraping
-template<typename T> struct is_task: public std::false_type {};
-template<typename T> struct is_task<task<T>>: public std::true_type {};
-template<typename T> struct is_task<const task<T>>: public std::true_type {};
-template<typename T> struct is_task<shared_task<T>>: public std::true_type {};
-template<typename T> struct is_task<const shared_task<T>>: public std::true_type {};
+template<typename T>
+struct is_task: public std::false_type {};
+template<typename T>
+struct is_task<task<T>>: public std::true_type {};
+template<typename T>
+struct is_task<const task<T>>: public std::true_type {};
+template<typename T>
+struct is_task<shared_task<T>>: public std::true_type {};
+template<typename T>
+struct is_task<const shared_task<T>>: public std::true_type {};
 
 // Extract the result type of a task if T is a task, otherwise just return T
-template<typename T> struct remove_task {
+template<typename T>
+struct remove_task {
 	typedef T type;
 };
-template<typename T> struct remove_task<task<T>> {
+template<typename T>
+struct remove_task<task<T>> {
 	typedef T type;
 };
-template<typename T> struct remove_task<const task<T>> {
+template<typename T>
+struct remove_task<const task<T>> {
 	typedef T type;
 };
-template<typename T> struct remove_task<shared_task<T>> {
+template<typename T>
+struct remove_task<shared_task<T>> {
 	typedef T type;
 };
-template<typename T> struct remove_task<const shared_task<T>> {
+template<typename T>
+struct remove_task<const shared_task<T>> {
 	typedef T type;
 };
 
 // Check if a type is callable with the given arguments
-template<typename Func, typename... Args, typename = decltype(std::declval<Func>()(std::declval<Args>()...))> std::true_type is_callable_helper(int);
-template<typename Func, typename... Args> std::false_type is_callable_helper(...);
-template<typename T> struct is_callable;
-template<typename Func, typename... Args> struct is_callable<Func(Args...)>: public decltype(is_callable_helper<Func, Args...>(0)) {};
+template<typename Func, typename... Args, typename = decltype(std::declval<Func>()(std::declval<Args>()...))>
+std::true_type is_callable_helper(int);
+template<typename Func, typename... Args>
+std::false_type is_callable_helper(...);
+template<typename T>
+struct is_callable;
+template<typename Func, typename... Args>
+struct is_callable<Func(Args...)>: public decltype(is_callable_helper<Func, Args...>(0)) {};
 
 // Wrapper to run a function object with an optional parameter:
 // - void returns are turned into fake_void
@@ -83,11 +100,13 @@ fake_void invoke_fake_void(Func&& f)
 	std::forward<Func>(f)();
 	return fake_void();
 }
-template<typename Func, typename Param> typename void_to_fake_void<decltype(std::declval<Func>()(std::declval<Param>()))>::type invoke_fake_void(Func&& f, Param&& p)
+template<typename Func, typename Param>
+typename void_to_fake_void<decltype(std::declval<Func>()(std::declval<Param>()))>::type invoke_fake_void(Func&& f, Param&& p)
 {
 	return invoke_fake_void([&f, &p] {return std::forward<Func>(f)(std::forward<Param>(p));});
 }
-template<typename Func> typename void_to_fake_void<decltype(std::declval<Func>()())>::type invoke_fake_void(Func&& f, fake_void)
+template<typename Func>
+typename void_to_fake_void<decltype(std::declval<Func>()())>::type invoke_fake_void(Func&& f, fake_void)
 {
 	return invoke_fake_void(std::forward<Func>(f));
 }
