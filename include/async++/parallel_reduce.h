@@ -23,7 +23,6 @@
 #endif
 
 namespace async {
-
 namespace detail {
 
 // Default map function which simply passes its parameter through unmodified

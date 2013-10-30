@@ -23,7 +23,6 @@
 #endif
 
 namespace async {
-
 namespace detail {
 
 // Partitioners are essentially ranges with an extra split() function. The

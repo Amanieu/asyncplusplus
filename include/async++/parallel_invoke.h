@@ -23,7 +23,6 @@
 #endif
 
 namespace async {
-
 namespace detail {
 
 // Recursively split the arguments so tasks are spawned in parallel
