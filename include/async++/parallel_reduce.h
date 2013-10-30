@@ -38,107 +38,60 @@ struct default_map {
 
 // Run a function for each element in a range and then reduce the results of that function to a single value
 template<typename Range, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_reduce(scheduler& sched, Range&& range, const Result& init, std::size_t grain, const MapFunc& map, const ReduceFunc& reduce)
+Result parallel_map_reduce(scheduler& sched, Range&& range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
 {
-	// If the length is less than the grain size, run the loop inline
-	auto begin = std::begin(range);
-	auto end = std::end(range);
-	std::size_t length = std::distance(begin, end);
-	if (length <= grain) {
-		Result out(init);
-		for (auto&& i: range)
-			out = reduce(out, map(i));
+	// Split the partition, run inline if no more splits are possible
+	auto partitioner = async::to_partitioner(std::forward<Range>(range));
+	auto subpart = partitioner.split();
+	if (std::begin(subpart) == std::end(subpart)) {
+		Result out = init;
+		for (auto&& i: partitioner)
+			out = reduce(std::move(out), map(std::forward<decltype(i)>(i)));
 		return out;
 	}
 
-	// Split the range at its midpoint
-	auto mid = begin;
-	std::advance(mid, length / 2);
-
 	// Run the function over each half in parallel
-	auto&& t = async::local_spawn(sched, [&sched, mid, end, &init, grain, &map, &reduce] {
-		return async::parallel_reduce(sched, async::make_range(mid, end), init, grain, map, reduce);
+	auto&& t = async::local_spawn(sched, [&sched, subpart, init, &map, &reduce] {
+		return async::parallel_map_reduce(sched, subpart, init, map, reduce);
 	});
-	return reduce(async::parallel_reduce(sched, async::make_range(begin, mid), init, grain, map, reduce), t.get());
+	Result out = async::parallel_map_reduce(sched, partitioner, init, map, reduce);
+	return reduce(std::move(out), t.get());
 }
 
-// Overload with implicit grain size
+// Overload with default scheduler
 template<typename Range, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_reduce(scheduler& sched, Range&& range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
+Result parallel_map_reduce(Range&& range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
 {
-	std::size_t grain = detail::auto_grain_size(std::distance(std::begin(range), std::end(range)));
-	return async::parallel_reduce(sched, range, init, grain, map, reduce);
+	return async::parallel_map_reduce(LIBASYNC_DEFAULT_SCHEDULER, range, init, map, reduce);
 }
 
-// Overloads with identity map function
-template<typename Range, typename Result, typename ReduceFunc>
-Result parallel_reduce(scheduler& sched, Range&& range, const Result& init, std::size_t grain, const ReduceFunc& reduce)
+// Overloads with std::initializer_list
+template<typename T, typename Result, typename MapFunc, typename ReduceFunc>
+Result parallel_map_reduce(scheduler& sched, std::initializer_list<T> range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
 {
-	return async::parallel_reduce(sched, range, init, grain, detail::default_map(), reduce);
+	return async::parallel_map_reduce(sched, async::make_range(range.begin(), range.end()), init, map, reduce);
 }
+template<typename T, typename Result, typename MapFunc, typename ReduceFunc>
+Result parallel_map_reduce(std::initializer_list<T> range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
+{
+	return async::parallel_map_reduce(async::make_range(range.begin(), range.end()), init, map, reduce);
+}
+
+// Variant with identity map operation
 template<typename Range, typename Result, typename ReduceFunc>
 Result parallel_reduce(scheduler& sched, Range&& range, const Result& init, const ReduceFunc& reduce)
 {
-	return async::parallel_reduce(sched, range, init, detail::default_map(), reduce);
-}
-
-// Overloads with default scheduler
-template<typename Range, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_reduce(Range&& range, const Result& init, std::size_t grain, const MapFunc& map, const ReduceFunc& reduce)
-{
-	return async::parallel_reduce(LIBASYNC_DEFAULT_SCHEDULER, range, init, grain, map, reduce);
-}
-template<typename Range, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_reduce(Range&& range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
-{
-	return async::parallel_reduce(LIBASYNC_DEFAULT_SCHEDULER, range, init, map, reduce);
-}
-template<typename Range, typename Result, typename ReduceFunc>
-Result parallel_reduce(Range&& range, const Result& init, std::size_t grain, const ReduceFunc& reduce)
-{
-	return async::parallel_reduce(LIBASYNC_DEFAULT_SCHEDULER, range, init, grain, reduce);
+	return async::parallel_map_reduce(sched, range, init, detail::default_map(), reduce);
 }
 template<typename Range, typename Result, typename ReduceFunc>
 Result parallel_reduce(Range&& range, const Result& init, const ReduceFunc& reduce)
 {
 	return async::parallel_reduce(LIBASYNC_DEFAULT_SCHEDULER, range, init, reduce);
 }
-
-// Overloads with std::initializer_list
-template<typename T, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_reduce(scheduler& sched, std::initializer_list<T> range, const Result& init, std::size_t grain, const MapFunc& map, const ReduceFunc& reduce)
-{
-	return async::parallel_reduce(sched, async::make_range(range.begin(), range.end()), init, grain, map, reduce);
-}
-template<typename T, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_reduce(scheduler& sched, std::initializer_list<T> range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
-{
-	return async::parallel_reduce(sched, async::make_range(range.begin(), range.end()), init, map, reduce);
-}
-template<typename T, typename Result, typename ReduceFunc>
-Result parallel_reduce(scheduler& sched, std::initializer_list<T> range, const Result& init, std::size_t grain, const ReduceFunc& reduce)
-{
-	return async::parallel_reduce(sched, async::make_range(range.begin(), range.end()), init, grain, reduce);
-}
 template<typename T, typename Result, typename ReduceFunc>
 Result parallel_reduce(scheduler& sched, std::initializer_list<T> range, const Result& init, const ReduceFunc& reduce)
 {
 	return async::parallel_reduce(sched, async::make_range(range.begin(), range.end()), init, reduce);
-}
-template<typename T, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_reduce(std::initializer_list<T> range, const Result& init, std::size_t grain, const MapFunc& map, const ReduceFunc& reduce)
-{
-	return async::parallel_reduce(async::make_range(range.begin(), range.end()), init, grain, map, reduce);
-}
-template<typename T, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_reduce(std::initializer_list<T> range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
-{
-	return async::parallel_reduce(async::make_range(range.begin(), range.end()), init, map, reduce);
-}
-template<typename T, typename Result, typename ReduceFunc>
-Result parallel_reduce(std::initializer_list<T> range, const Result& init, std::size_t grain, const ReduceFunc& reduce)
-{
-	return async::parallel_reduce(async::make_range(range.begin(), range.end()), init, grain, reduce);
 }
 template<typename T, typename Result, typename ReduceFunc>
 Result parallel_reduce(std::initializer_list<T> range, const Result& init, const ReduceFunc& reduce)

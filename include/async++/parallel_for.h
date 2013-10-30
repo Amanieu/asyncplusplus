@@ -24,64 +24,28 @@
 
 namespace async {
 
-namespace detail {
-
-// Automatically determine a grain size for a sequence length
-inline std::size_t auto_grain_size(std::size_t dist)
-{
-	// Determine the grain size automatically using a heuristic
-	std::size_t num_threads = std::thread::hardware_concurrency();
-	if (num_threads == 0)
-		num_threads = 1;
-	std::size_t grain = dist / (8 * num_threads);
-	if (grain < 1)
-		grain = 1;
-	if (grain > 2048)
-		grain = 2048;
-	return grain;
-}
-
-} // namespace detail
-
 // Run a function for each element in a range
-template<typename Range, typename Func>
-void parallel_for(scheduler& sched, Range&& range, std::size_t grain, const Func& func)
-{
-	// If the length is less than the grain size, run the loop inline
-	auto begin = std::begin(range);
-	auto end = std::end(range);
-	std::size_t length = std::distance(begin, end);
-	if (length <= grain) {
-		std::for_each(begin, end, func);
-		return;
-	}
-
-	// Split the range at its midpoint
-	auto mid = begin;
-	std::advance(mid, length / 2);
-
-	// Run the function over each half in parallel
-	auto&& t = async::local_spawn(sched, [&sched, mid, end, grain, &func] {
-		async::parallel_for(sched, async::make_range(mid, end), grain, func);
-	});
-	async::parallel_for(sched, async::make_range(begin, mid), grain, func);
-	t.get();
-}
-
-// Overload with implicit grain size
 template<typename Range, typename Func>
 void parallel_for(scheduler& sched, Range&& range, const Func& func)
 {
-	std::size_t grain = detail::auto_grain_size(std::distance(std::begin(range), std::end(range)));
-	async::parallel_for(sched, range, grain, func);
+	// Split the partition, run inline if no more splits are possible
+	auto partitioner = async::to_partitioner(std::forward<Range>(range));
+	auto subpart = partitioner.split();
+	if (std::begin(subpart) == std::end(subpart)) {
+		for (auto&& i: partitioner)
+			func(std::forward<decltype(i)>(i));
+		return;
+	}
+
+	// Run the function over each half in parallel
+	auto&& t = async::local_spawn(sched, [&sched, subpart, &func] {
+		async::parallel_for(sched, subpart, func);
+	});
+	async::parallel_for(sched, partitioner, func);
+	t.get();
 }
 
-// Overloads with default scheduler
-template<typename Range, typename Func>
-void parallel_for(Range&& range, std::size_t grain, const Func& func)
-{
-	async::parallel_for(LIBASYNC_DEFAULT_SCHEDULER, range, grain, func);
-}
+// Overload with default scheduler
 template<typename Range, typename Func>
 void parallel_for(Range&& range, const Func& func)
 {
@@ -90,19 +54,9 @@ void parallel_for(Range&& range, const Func& func)
 
 // Overloads with std::initializer_list
 template<typename T, typename Func>
-void parallel_for(scheduler& sched, std::initializer_list<T> range, std::size_t grain, const Func& func)
-{
-	async::parallel_for(sched, async::make_range(range.begin(), range.end()), grain, func);
-}
-template<typename T, typename Func>
 void parallel_for(scheduler& sched, std::initializer_list<T> range, const Func& func)
 {
 	async::parallel_for(sched, async::make_range(range.begin(), range.end()), func);
-}
-template<typename T, typename Func>
-void parallel_for(std::initializer_list<T> range, std::size_t grain, const Func& func)
-{
-	async::parallel_for(async::make_range(range.begin(), range.end()), grain, func);
 }
 template<typename T, typename Func>
 void parallel_for(std::initializer_list<T> range, const Func& func)

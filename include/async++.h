@@ -108,6 +108,7 @@ struct LIBASYNC_EXPORT task_canceled {};
 #include "async++/when_all_any.h"
 #include "async++/cancel.h"
 #include "async++/range.h"
+#include "async++/partitioner.h"
 #include "async++/parallel_invoke.h"
 #include "async++/parallel_for.h"
 #include "async++/parallel_reduce.h"
