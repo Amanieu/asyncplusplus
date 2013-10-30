@@ -68,18 +68,69 @@ public:
 	}
 	static_partitioner_impl split()
 	{
+		// Don't split if below grain size
 		std::size_t length = std::distance(iter_begin, iter_end);
 		static_partitioner_impl out(iter_begin, iter_begin, grain);
 		if (length <= grain)
 			return out;
-		std::advance(out.iter_end, length / 2);
-		iter_begin = out.iter_end;
+
+		// Split our range in half
+		std::advance(iter_begin, length / 2);
+		out.iter_end = iter_begin;
 		return out;
 	}
 
 private:
 	Iter iter_begin, iter_end;
 	std::size_t grain;
+};
+
+template<typename Iter>
+class auto_partitioner_impl {
+public:
+	// thread_id is initialized to "no thread" and will be set on first split
+	auto_partitioner_impl(Iter begin, Iter end, std::size_t grain)
+		: iter_begin(begin), iter_end(end), grain(grain) {}
+	Iter begin() const
+	{
+		return iter_begin;
+	}
+	Iter end() const
+	{
+		return iter_end;
+	}
+	auto_partitioner_impl split()
+	{
+		// Don't split if below grain size
+		std::size_t length = std::distance(iter_begin, iter_end);
+		auto_partitioner_impl out(iter_begin, iter_begin, grain);
+		if (length <= grain)
+			return out;
+
+		// Check if we are in a different thread than we were before
+		std::thread::id current_thread = std::this_thread::get_id();
+		if (current_thread != last_thread)
+			num_threads = std::thread::hardware_concurrency();
+
+		// If we only have one thread, don't split
+		if (num_threads <= 1)
+			return out;
+
+		// Split our range in half
+		std::advance(iter_begin, length / 2);
+		out.iter_end = iter_begin;
+		out.last_thread = current_thread;
+		last_thread = current_thread;
+		out.num_threads = num_threads / 2;
+		num_threads -= out.num_threads;
+		return out;
+	}
+
+private:
+	Iter iter_begin, iter_end;
+	std::size_t grain;
+	std::size_t num_threads;
+	std::thread::id last_thread;
 };
 
 } // namespace detail
@@ -98,6 +149,16 @@ detail::static_partitioner_impl<decltype(std::begin(std::declval<Range>()))> sta
 	return {std::begin(range), std::end(range), grain};
 }
 
+// A more advanced partitioner which initially divides the range into one chunk
+// for each available thread. The range is split further if a chunk gets stolen
+// by a different thread.
+template<typename Range>
+detail::auto_partitioner_impl<decltype(std::begin(std::declval<Range>()))> auto_partitioner(Range&& range)
+{
+	std::size_t grain = detail::auto_grain_size(std::distance(std::begin(range), std::end(range)));
+	return {std::begin(range), std::end(range), grain};
+}
+
 // Wrap a range in a partitioner. If the input is already a partitioner then it
 // is returned unchanged. This allows parallel algorithms to accept both ranges
 // and partitioners as parameters.
@@ -107,9 +168,9 @@ Partitioner&& to_partitioner(Partitioner&& partitioner)
 	return std::forward<Partitioner>(partitioner);
 }
 template<typename Range, typename std::enable_if<!detail::is_partitioner<Range>::value, int>::type = 0>
-decltype(async::static_partitioner(std::declval<Range>())) to_partitioner(Range&& range)
+decltype(async::auto_partitioner(std::declval<Range>())) to_partitioner(Range&& range)
 {
-	return async::static_partitioner(std::forward<Range>(range));
+	return async::auto_partitioner(std::forward<Range>(range));
 }
 
 } // namespace async
