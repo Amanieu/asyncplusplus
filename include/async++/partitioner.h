@@ -66,10 +66,6 @@ public:
 	{
 		return iter_end;
 	}
-	bool empty() const
-	{
-		return iter_begin == iter_end;
-	}
 	static_partitioner_impl split()
 	{
 		std::size_t length = std::distance(iter_begin, iter_end);
