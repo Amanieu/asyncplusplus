@@ -64,7 +64,7 @@
 # endif
 #endif
 #ifdef LIBASYNC_NO_EXCEPTIONS
-# define LIBASYNC_THROW(...) abort()
+# define LIBASYNC_THROW(...) std::abort()
 # define LIBASYNC_RETHROW() do {} while (false)
 # define LIBASYNC_TRY if (true)
 # define LIBASYNC_CATCH(...) else if (false)

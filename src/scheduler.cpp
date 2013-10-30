@@ -20,13 +20,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <random>
 #include <thread>
 #include <type_traits>
 #include <vector>
-#include <cstdlib>
 
 #include <async++.h>
 
@@ -338,7 +338,7 @@ public:
 		// If that fails, use the number of CPUs in the system
 		const char *s = std::getenv("LIBASYNC_NUM_THREADS");
 		if (s)
-			num_threads = strtoul(s, nullptr, 10);
+			num_threads = std::strtoul(s, nullptr, 10);
 		else
 			num_threads = std::thread::hardware_concurrency();
 

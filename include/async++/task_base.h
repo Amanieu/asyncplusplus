@@ -265,7 +265,7 @@ struct task_base: public ref_count_base<task_base> {
 	{
 		if (wait() == task_state::TASK_CANCELED) {
 #ifdef LIBASYNC_NO_EXCEPTIONS
-			abort();
+			std::abort();
 #else
 			if (except)
 				std::rethrow_exception(except);
