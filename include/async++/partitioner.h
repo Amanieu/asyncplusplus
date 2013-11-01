@@ -69,13 +69,14 @@ public:
 	{
 		// Don't split if below grain size
 		std::size_t length = std::distance(iter_begin, iter_end);
-		static_partitioner_impl out(iter_begin, iter_begin, grain);
+		static_partitioner_impl out(iter_end, iter_end, grain);
 		if (length <= grain)
 			return out;
 
 		// Split our range in half
-		std::advance(iter_begin, length / 2);
-		out.iter_end = iter_begin;
+		iter_end = iter_begin;
+		std::advance(iter_end, (length + 1) / 2);
+		out.iter_begin = iter_end;
 		return out;
 	}
 
@@ -102,7 +103,7 @@ public:
 	{
 		// Don't split if below grain size
 		std::size_t length = std::distance(iter_begin, iter_end);
-		auto_partitioner_impl out(iter_begin, iter_begin, grain);
+		auto_partitioner_impl out(iter_end, iter_end, grain);
 		if (length <= grain)
 			return out;
 
@@ -116,8 +117,9 @@ public:
 			return out;
 
 		// Split our range in half
-		std::advance(iter_begin, length / 2);
-		out.iter_end = iter_begin;
+		iter_end = iter_begin;
+		std::advance(iter_end, (length + 1) / 2);
+		out.iter_begin = iter_end;
 		out.last_thread = current_thread;
 		last_thread = current_thread;
 		out.num_threads = num_threads / 2;
