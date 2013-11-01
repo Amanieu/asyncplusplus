@@ -79,7 +79,7 @@
 #define LIBASYNC_CACHELINE_SIZE 64
 #ifdef __GNUC__
 # define LIBASYNC_CACHELINE_ALIGN __attribute__((aligned(LIBASYNC_CACHELINE_SIZE)))
-#elif _MSC_VER
+#elif defined(_MSC_VER)
 # define LIBASYNC_CACHELINE_ALIGN __declspec(align(LIBASYNC_CACHELINE_SIZE))
 #else
 # define LIBASYNC_CACHELINE_ALIGN alignas(LIBASYNC_CACHELINE_SIZE)
