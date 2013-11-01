@@ -30,10 +30,20 @@
 
 #include <async++.h>
 
-#include "aligned_alloc.h"
 #include "auto_reset_event.h"
 #include "fifo_queue.h"
 #include "work_steal_queue.h"
+
+// For posix_memalign/_aligned_malloc
+#ifdef _WIN32
+# include <malloc.h>
+# ifdef __MINGW32__
+#  define _aligned_malloc __mingw_aligned_malloc
+#  define _aligned_free __mingw_aligned_free
+# endif
+#else
+# include <stdlib.h>
+#endif
 
 // thread_local keyword support
 #ifdef __clang__
@@ -54,15 +64,6 @@
 # endif
 #endif
 
-// Cacheline alignment to avoid false sharing between different threads
-#ifdef __GNUC__
-# define CACHELINE_ALIGN __attribute__((aligned(64)))
-#elif _MSC_VER
-# define CACHELINE_ALIGN __declspec(align(64))
-#else
-# define CACHELINE_ALIGN alignas(64)
-#endif
-
 namespace async {
 namespace detail {
 
@@ -72,29 +73,15 @@ static thread_local bool thread_in_pool = false;
 // Current thread's index in the pool
 static thread_local std::size_t thread_id;
 
-// Number of threads in the pool
-static std::size_t num_threads;
-
 // Per-thread data, aligned to cachelines to avoid false sharing
-struct CACHELINE_ALIGN thread_data_t {
+struct LIBASYNC_CACHELINE_ALIGN thread_data_t {
 	work_steal_queue queue;
 	std::minstd_rand rng;
 	auto_reset_event event;
 };
 
-// Custom deleter for the per-thread data, since we can't use delete[]
-// for aligned data.
-struct thread_data_deleter {
-	void operator()(thread_data_t* thread_data)
-	{
-		for (std::size_t i = 0; i < num_threads; i++)
-			thread_data[i].~thread_data_t();
-		aligned_free(thread_data);
-	}
-};
-
 // Array of per-thread data
-static std::unique_ptr<thread_data_t[], thread_data_deleter> thread_data;
+static aligned_array<thread_data_t> thread_data;
 
 // Global queue for tasks from outside the pool
 static spinlock public_queue_lock;
@@ -110,6 +97,31 @@ static auto_reset_event shutdown_complete_event;
 // List of threads waiting for tasks to run
 static spinlock waiters_lock;
 static std::vector<auto_reset_event*> waiters;
+
+void* aligned_alloc(std::size_t size, std::size_t align)
+{
+#ifdef _WIN32
+	void* ptr = _aligned_malloc(size, align);
+	if (!ptr)
+		LIBASYNC_THROW(std::bad_alloc());
+	return ptr;
+#else
+	void* result;
+	if (posix_memalign(&result, align, size))
+		LIBASYNC_THROW(std::bad_alloc());
+	else
+		return result;
+#endif
+}
+
+void aligned_free(void* addr)
+{
+#ifdef _WIN32
+	_aligned_free(addr);
+#else
+	free(addr);
+#endif
+}
 
 // Register a thread on the waiter list
 static void register_waiter(auto_reset_event& thread_event)
@@ -136,7 +148,7 @@ static void* pop_public_queue()
 static void* steal_task()
 {
 	// Make a list of victim thread ids and shuffle it
-	std::vector<std::size_t> victims(num_threads);
+	std::vector<std::size_t> victims(thread_data.size());
 	std::iota(victims.begin(), victims.end(), 0);
 	std::shuffle(victims.begin(), victims.end(), thread_data[thread_id].rng);
 
@@ -337,6 +349,7 @@ public:
 		// Get the requested number of threads from the environment
 		// If that fails, use the number of CPUs in the system
 		const char *s = std::getenv("LIBASYNC_NUM_THREADS");
+		std::size_t num_threads;
 		if (s)
 			num_threads = std::strtoul(s, nullptr, 10);
 		else
@@ -356,9 +369,7 @@ public:
 		public_queue.reset(new fifo_queue);
 
 		// Allocate per-thread data
-		thread_data.reset(static_cast<thread_data_t*>(aligned_alloc(sizeof(thread_data_t) * num_threads, std::alignment_of<thread_data_t>::value)));
-		for (std::size_t i = 0; i < num_threads; i++)
-			new (&thread_data[i]) thread_data_t;
+		thread_data = aligned_array<thread_data_t>(num_threads);
 
 		// Start worker threads
 		std::thread(recursive_spawn_worker_thread, 0, num_threads).detach();

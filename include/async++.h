@@ -75,6 +75,16 @@
 # define LIBASYNC_CATCH(...) catch (__VA_ARGS__)
 #endif
 
+// Cacheline alignment to avoid false sharing between different threads
+#define LIBASYNC_CACHELINE_SIZE 64
+#ifdef __GNUC__
+# define LIBASYNC_CACHELINE_ALIGN __attribute__((aligned(LIBASYNC_CACHELINE_SIZE)))
+#elif _MSC_VER
+# define LIBASYNC_CACHELINE_ALIGN __declspec(align(LIBASYNC_CACHELINE_SIZE))
+#else
+# define LIBASYNC_CACHELINE_ALIGN alignas(LIBASYNC_CACHELINE_SIZE)
+#endif
+
 // Set this to override the default scheduler for newly created tasks.
 // async::threadpool_scheduler() is used by default.
 #ifndef LIBASYNC_DEFAULT_SCHEDULER
@@ -102,6 +112,7 @@ struct LIBASYNC_EXPORT task_canceled {};
 // Include sub-headers
 #include "async++/spinlock.h"
 #include "async++/traits.h"
+#include "async++/aligned_alloc.h"
 #include "async++/ref_count.h"
 #include "async++/scheduler_fwd.h"
 #include "async++/task_base.h"

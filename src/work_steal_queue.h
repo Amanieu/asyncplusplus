@@ -27,14 +27,13 @@ namespace detail {
 // themselves into smaller tasks, this allows larger chunks of work to be
 // stolen.
 class work_steal_queue {
-	std::size_t length;
-	std::unique_ptr<void*[]> items;
+	aligned_array<void*, LIBASYNC_CACHELINE_SIZE> items;
 	spinlock lock;
 	std::atomic<std::size_t> atomic_head, atomic_tail;
 
 public:
 	work_steal_queue()
-		: length(32), items(new void*[32]), atomic_head(0), atomic_tail(0) {}
+		: items(32), atomic_head(0), atomic_tail(0) {}
 
 	// Push a task to the tail of this thread's queue
 	void push(task_run_handle t)
@@ -42,17 +41,16 @@ public:
 		std::size_t tail = atomic_tail.load(std::memory_order_relaxed);
 
 		// Check if we have space to insert an element at the tail
-		if (tail == length) {
+		if (tail == items.size()) {
 			// Lock the queue
 			std::lock_guard<spinlock> locked(lock);
 			std::size_t head = atomic_head.load(std::memory_order_relaxed);
 
 			// Resize the queue if it is more than 75% full
-			if (head <= length / 4) {
-				length *= 2;
-				std::unique_ptr<void*[]> ptr(new void*[length]);
-				std::copy(items.get() + head, items.get() + tail, ptr.get());
-				items = std::move(ptr);
+			if (head <= items.size() / 4) {
+				aligned_array<void*, 64> new_items(items.size() * 2);
+				std::copy(items.get() + head, items.get() + tail, new_items.get());
+				items = std::move(new_items);
 			} else {
 				// Simply shift the items to free up space at the end
 				std::copy(items.get() + head, items.get() + tail, items.get());

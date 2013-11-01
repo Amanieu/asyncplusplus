@@ -64,9 +64,9 @@ class continuation_vector {
 
 		// Vector of continuations. The capacity is the lowest power of 2
 		// which is >= count.
-		std::unique_ptr<task_ptr []>& vector_data()
+		std::unique_ptr<task_ptr[]>& vector_data()
 		{
-			return *reinterpret_cast<std::unique_ptr<task_ptr []>*>(&data);
+			return *reinterpret_cast<std::unique_ptr<task_ptr[]>*>(&data);
 		}
 	} data;
 
@@ -100,7 +100,7 @@ public:
 			ptr[0] = std::move(data.inline_data());
 			ptr[1] = std::move(t);
 			data.inline_data().~task_ptr();
-			new(&data.vector_data()) std::unique_ptr<task_ptr []>(std::move(ptr));
+			new(&data.vector_data()) std::unique_ptr<task_ptr[]>(std::move(ptr));
 			count = 2;
 		}
 
@@ -138,7 +138,7 @@ public:
 };
 
 // Type-generic base task object
-struct task_base: public ref_count_base<task_base> {
+struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 	// Task state
 	std::atomic<task_state> state;
 
@@ -160,6 +160,16 @@ struct task_base: public ref_count_base<task_base> {
 	// - Free the task function when canceling
 	// - Destroy the task function and result
 	void (*dispatch)(task_base*, dispatch_op);
+
+	// Use aligned memory allocation
+	static void* operator new(std::size_t size)
+	{
+		return aligned_alloc(size, LIBASYNC_CACHELINE_SIZE);
+	}
+	static void operator delete(void* ptr)
+	{
+		aligned_free(ptr);
+	}
 
 	// Initialize task state
 	task_base()
@@ -490,6 +500,7 @@ struct task_func: public task_result<Result>, private func_holder<Func> {
 
 			// Then destroy the result
 			task_result<Result>::cleanup(t, dispatch_op::destroy);
+			break;
 		}
 	}
 

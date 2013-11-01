@@ -23,29 +23,27 @@ namespace detail {
 
 // Queue used to hold tasks from outside the thread pool, in FIFO order
 class fifo_queue {
-	std::size_t length;
-	std::unique_ptr<void*[]> items;
+	aligned_array<void*, LIBASYNC_CACHELINE_SIZE> items;
 	std::size_t head, tail;
 
 public:
 	fifo_queue()
-		: length(32), items(new void*[32]), head(0), tail(0) {}
+		: items(32), head(0), tail(0) {}
 
 	// Push a task to the end of the queue
 	void push(task_run_handle t)
 	{
 		// Resize queue if it is full
-		if (head == ((tail + 1) & (length - 1))) {
-			length *= 2;
-			std::unique_ptr<void*[]> ptr(new void*[length]);
+		if (head == ((tail + 1) & (items.size() - 1))) {
+			aligned_array<void*, 64> new_items(items.size() * 2);
 			for (std::size_t i = 0; i < tail - head; i++)
-				ptr[i] = items[(i + head) & (length - 1)];
-			items = std::move(ptr);
+				new_items[i] = items[(i + head) & (items.size() - 1)];
+			items = std::move(new_items);
 		}
 
 		// Push the item
 		items[tail] = t.to_void_ptr();
-		tail = (tail + 1) & (length - 1);
+		tail = (tail + 1) & (items.size() - 1);
 	}
 
 	// Pop a task from the front of the queue
@@ -56,7 +54,7 @@ public:
 			return nullptr;
 		else {
 			void* task = items[head];
-			head = (head + 1) & (length - 1);
+			head = (head + 1) & (items.size() - 1);
 			return task;
 		}
 	}
