@@ -410,6 +410,9 @@ public:
 // Task type returned by local_spawn()
 template<typename Func>
 class local_task {
+	// Make sure the function type is callable
+	static_assert(detail::is_callable<Func()>::value, "Invalid function type passed to local_spawn()");
+
 	// Task result type
 	typedef typename detail::remove_task<decltype(std::declval<Func>()())>::type result_type;
 	typedef typename detail::void_to_fake_void<result_type>::type internal_result;
