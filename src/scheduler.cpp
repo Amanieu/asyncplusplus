@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <random>
 #include <thread>
 #include <type_traits>
@@ -458,18 +459,12 @@ public:
 
 // Thread scheduler implementation
 class thread_scheduler_impl: public scheduler {
-	struct thread_func {
-		void operator()() const
-		{
-			t.run();
-		}
-		mutable task_run_handle t;
-	};
-
 public:
 	virtual void schedule(task_run_handle t) override final
 	{
-		std::thread(thread_func{std::move(t)}).detach();
+		std::thread([](const std::shared_ptr<task_run_handle>& t) {
+			t->run();
+		}, std::make_shared<task_run_handle>(std::move(t))).detach();
 	}
 };
 
