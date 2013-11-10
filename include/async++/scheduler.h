@@ -47,11 +47,6 @@ class task_wait_handle {
 		}
 	};
 
-	// Non-copyable and non-movable, it can only be used in a wait handler
-	task_wait_handle(const task_wait_handle& other)
-		: handle(other.handle) {}
-	task_wait_handle& operator=(const task_wait_handle&);
-
 public:
 	// Check if the task has finished executing
 	bool ready() const
