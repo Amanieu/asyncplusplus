@@ -58,8 +58,11 @@ public:
 				// - Success => we were woken up, so return
 				// - EWOULDBLOCK => futex_val is not -1 anymore, so return
 				// - EINTR => spurious wakeup, try again
+				// - Other => throw
 				ret = syscall(SYS_futex, reinterpret_cast<int*>(&futex_val), FUTEX_WAIT_PRIVATE, -1, nullptr);
 			} while (ret == -1 && errno == EINTR);
+			if (ret == -1 && errno != EWOULDBLOCK)
+				throw std::system_error(errno, std::system_category());
 		} else
 			std::atomic_thread_fence(std::memory_order_acquire);
 	}
@@ -79,8 +82,11 @@ public:
 		} while (!futex_val.compare_exchange_weak(val, val + 1, std::memory_order_release, std::memory_order_relaxed));
 
 		// Wake up a sleeping thread if futex_val was negative
-		if (val < 0)
-			syscall(SYS_futex, reinterpret_cast<int*>(&futex_val), FUTEX_WAKE_PRIVATE, 1);
+		if (val < 0) {
+			int ret = syscall(SYS_futex, reinterpret_cast<int*>(&futex_val), FUTEX_WAKE_PRIVATE, 1);
+			if (ret == -1)
+				throw std::system_error(errno, std::system_category());
+		}
 	}
 };
 #elif defined(_WIN32)
@@ -92,25 +98,31 @@ public:
 	auto_reset_event()
 	{
 		event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+		if (!event)
+			throw std::system_error(GetLastError(), std::system_category());
 	}
 	~auto_reset_event()
 	{
-		CloseHandle(event);
+		if (!CloseHandle(event))
+			throw std::system_error(GetLastError(), std::system_category());
 	}
 
 	void wait()
 	{
-		WaitForSingleObject(event, INFINITE);
+		if (WaitForSingleObject(event, INFINITE) == WAIT_FAILED)
+			throw std::system_error(GetLastError(), std::system_category());
 	}
 
 	void reset()
 	{
-		ResetEvent(event);
+		if (!ResetEvent(event))
+			throw std::system_error(GetLastError(), std::system_category());
 	}
 
 	void signal()
 	{
-		SetEvent(event);
+		if (!SetEvent(event))
+			throw std::system_error(GetLastError(), std::system_category());
 	}
 };
 #else
