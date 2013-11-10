@@ -101,11 +101,7 @@ public:
 	// Query whether the task has finished executing
 	bool ready() const
 	{
-		if (internal_task->state.load(std::memory_order_relaxed) >= task_state::TASK_COMPLETED) {
-			std::atomic_thread_fence(std::memory_order_acquire);
-			return true;
-		} else
-			return false;
+		return internal_task->ready();
 	}
 
 	// Wait for the task to complete
@@ -145,8 +141,8 @@ protected:
 #endif
 
 		// Only allow setting the value once
-		detail::task_state expected = detail::task_state::TASK_PENDING;
-		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_acquire, std::memory_order_relaxed))
+		detail::task_state expected = detail::task_state::PENDING;
+		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::LOCKED, std::memory_order_acquire, std::memory_order_relaxed))
 			return false;
 
 		LIBASYNC_TRY {
@@ -220,8 +216,8 @@ public:
 #endif
 
 		// Only allow setting the value once
-		detail::task_state expected = detail::task_state::TASK_PENDING;
-		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::TASK_LOCKED, std::memory_order_acquire, std::memory_order_relaxed))
+		detail::task_state expected = detail::task_state::PENDING;
+		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::LOCKED, std::memory_order_acquire, std::memory_order_relaxed))
 			return false;
 
 		// Cancel the task
@@ -461,11 +457,7 @@ public:
 	// Query whether the task has finished executing
 	bool ready() const
 	{
-		if (internal_task.state.load(std::memory_order_relaxed) >= detail::task_state::TASK_COMPLETED) {
-			std::atomic_thread_fence(std::memory_order_acquire);
-			return true;
-		} else
-			return false;
+		return internal_task.ready();
 	}
 
 	// Wait for the task to complete
@@ -515,7 +507,7 @@ task<typename std::decay<T>::type> make_task(T&& value)
 
 	out.internal_task = detail::task_ptr(new detail::task_result<typename std::decay<T>::type>);
 	detail::get_internal_task(out)->set_result(std::forward<T>(value));
-	out.internal_task->state.store(detail::task_state::TASK_COMPLETED, std::memory_order_relaxed);
+	out.internal_task->state.store(detail::task_state::COMPLETED, std::memory_order_relaxed);
 
 	return out;
 }
@@ -524,7 +516,7 @@ inline task<void> make_task()
 	task<void> out;
 
 	out.internal_task = detail::task_ptr(new detail::task_result<detail::fake_void>);
-	out.internal_task->state.store(detail::task_state::TASK_COMPLETED, std::memory_order_relaxed);
+	out.internal_task->state.store(detail::task_state::COMPLETED, std::memory_order_relaxed);
 
 	return out;
 }
