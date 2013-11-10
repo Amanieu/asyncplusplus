@@ -241,7 +241,7 @@ class task: public detail::basic_task<Result> {
 	friend task<typename std::decay<T>::type> make_task(T&& value);
 	friend task<void> make_task();
 	template<typename Func>
-	friend task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn(scheduler& sched, Func&& f);
+	friend task<typename detail::remove_task<typename std::result_of<Func()>::type>::type> spawn(scheduler& sched, Func&& f);
 	friend class detail::basic_event<Result>;
 
 	// Movable but not copyable
@@ -475,8 +475,9 @@ public:
 };
 
 // Spawn a function asynchronously
+// Using result_of instead of decltype here because Intel C++ gets confused by the previous friend declaration
 template<typename Func>
-task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn(scheduler& sched, Func&& f)
+task<typename detail::remove_task<typename std::result_of<Func()>::type>::type> spawn(scheduler& sched, Func&& f)
 {
 	// Make sure the function type is callable
 	static_assert(detail::is_callable<Func()>::value, "Invalid function type passed to spawn()");

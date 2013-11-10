@@ -77,14 +77,16 @@ struct remove_task<const shared_task<T>> {
 };
 
 // Check if a type is callable with the given arguments
+typedef char one[1];
+typedef char two[2];
 template<typename Func, typename... Args, typename = decltype(std::declval<Func>()(std::declval<Args>()...))>
-std::true_type is_callable_helper(int);
+two& is_callable_helper(int);
 template<typename Func, typename... Args>
-std::false_type is_callable_helper(...);
+one& is_callable_helper(...);
 template<typename T>
 struct is_callable;
 template<typename Func, typename... Args>
-struct is_callable<Func(Args...)>: public decltype(is_callable_helper<Func, Args...>(0)) {};
+struct is_callable<Func(Args...)>: public std::integral_constant<bool, sizeof(is_callable_helper<Func, Args...>(0)) - 1> {};
 
 // Wrapper to run a function object with an optional parameter:
 // - void returns are turned into fake_void

@@ -26,7 +26,9 @@ namespace async {
 namespace detail {
 
 // Task states
-enum class task_state: unsigned char {
+// Intel C++ seems to get confused by enum class, so just use a normal enum.
+// We can still access elements using the task_state:: scope.
+enum task_state: unsigned char {
 	PENDING, // Task has not completed yet
 	LOCKED, // Task is locked (used by event_task to prevent double set)
 	COMPLETED, // Task has finished execution and a result is available

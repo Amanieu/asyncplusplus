@@ -53,7 +53,7 @@
 # if __has_feature(cxx_thread_local)
 #  define HAVE_THREAD_LOCAL
 # endif
-#elif __GNUC__ * 100 + __GNUC_MINOR__ >= 408
+#elif !defined(__INTEL_COMPILER) && __GNUC__ * 100 + __GNUC_MINOR__ >= 408
 # define HAVE_THREAD_LOCAL
 #endif
 

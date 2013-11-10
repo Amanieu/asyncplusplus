@@ -33,11 +33,11 @@ namespace detail {
 
 // Detect whether a range is a partitioner
 template<typename T, typename = decltype(std::declval<T>().split())>
-std::true_type is_partitioner_helper(int);
+two& is_partitioner_helper(int);
 template<typename T>
-std::false_type is_partitioner_helper(...);
+one& is_partitioner_helper(...);
 template<typename T>
-struct is_partitioner: public decltype(is_partitioner_helper<T>(0)) {};
+struct is_partitioner: public std::integral_constant<bool, sizeof(is_partitioner_helper<T>(0)) - 1> {};
 
 // Automatically determine a grain size for a sequence length
 inline std::size_t auto_grain_size(std::size_t dist)
