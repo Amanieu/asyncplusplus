@@ -187,22 +187,26 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 		// Handle continuations that run even if the parent task is canceled
 		if (!cancel || cont->always_cont) {
 			scheduler& s = *cont->sched;
-			schedule_task(s, std::move(cont));
+			try {
+				schedule_task(s, std::move(cont));
+			} catch (...) {
+				// This is suboptimal, but better than letting the exception leak
+				cont->cancel(std::current_exception());
+			}
 		} else
 			cont->cancel(except);
 	}
 
 	// Run all of the task's continuations after it has completed or canceled.
 	// The list of continuations is then emptied.
-	template<bool cancel>
-	void run_continuations()
+	void run_continuations(bool cancel)
 	{
 		// Wait for any threads which may be adding a continuation. The lock is
 		// not needed afterwards because any future continuations are run
 		// directly instead of being added to the continuation list.
-		{
-			std::lock_guard<spinlock> locked(lock);
-		}
+		while (lock.get_atomic().load(std::memory_order_relaxed))
+			spinlock::spin_pause();
+		std::atomic_thread_fence(std::memory_order_acquire);
 
 		// Early exit for common case of zero continuations
 		if (continuations.size() == 0)
@@ -248,14 +252,14 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 	{
 		except = std::move(cancel_exception);
 		state.store(task_state::TASK_CANCELED, std::memory_order_release);
-		run_continuations<true>();
+		run_continuations(true);
 	}
 
 	// Finish the task after it has been executed and the result set
 	void finish()
 	{
 		state.store(task_state::TASK_COMPLETED, std::memory_order_release);
-		run_continuations<false>();
+		run_continuations(false);
 	}
 
 	// Wait for the task to finish executing

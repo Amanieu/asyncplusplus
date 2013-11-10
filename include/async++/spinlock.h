@@ -61,6 +61,12 @@ public:
 		locked.store(false, std::memory_order_release);
 	}
 
+	// Low-level access to atomic variable
+	std::atomic<bool>& get_atomic()
+	{
+		return locked;
+	}
+
 	// Pause for use in spinloops. On hyperthreaded CPUs, this yields to the other
 	// hardware thread. Otherwise it is simply a no-op.
 	static void spin_pause()
