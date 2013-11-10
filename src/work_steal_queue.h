@@ -96,14 +96,15 @@ public:
 	void push(task_run_handle x)
 	{
 		std::size_t b = bottom.load(std::memory_order_relaxed);
-		std::size_t t = top.load(std::memory_order_acquire);
+		std::size_t t = top.load(std::memory_order_relaxed);
 		circular_array* a = array.load(std::memory_order_relaxed);
 
 		// Grow the array if it is full
 		if (to_signed(b - t) >= to_signed(a->size())) {
 			a = a->grow(t, b);
 			array.store(a, std::memory_order_release);
-		}
+		} else
+			std::atomic_thread_fence(std::memory_order_acquire);
 
 		// Note that we only convert to void* here in case grow throws due to
 		// lack of memory.
