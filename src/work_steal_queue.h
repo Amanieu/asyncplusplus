@@ -76,6 +76,7 @@ class work_steal_queue {
 	{
 		// Unsigned to signed conversion is implementation-defined if the value
 		// doesn't fit, so we convert manually.
+		static_assert(static_cast<std::size_t>(PTRDIFF_MAX) + 1 == static_cast<std::size_t>(PTRDIFF_MIN), "Wrong integer wrapping behavior");
 		if (x > PTRDIFF_MAX)
 			return static_cast<std::ptrdiff_t>(x - PTRDIFF_MIN) + PTRDIFF_MIN;
 		else
