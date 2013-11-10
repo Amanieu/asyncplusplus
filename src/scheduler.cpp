@@ -20,6 +20,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <memory>
 #include <mutex>

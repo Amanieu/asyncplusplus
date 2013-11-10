@@ -21,99 +21,154 @@
 namespace async {
 namespace detail {
 
-// Work-stealing queue, contains a list of tasks belonging to a single thread.
-// A thread accessing is own queue will use the tail, whereas a thread stealing
-// from another thread's queue will use the head. Since tasks tend to split
-// themselves into smaller tasks, this allows larger chunks of work to be
-// stolen.
+// Chase-Lev work stealing deque
+//
+// Dynamic Circular Work-Stealing Deque
+// http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.170.1097&rep=rep1&type=pdf
+//
+// Correct and Efﬁcient Work-Stealing for Weak Memory Models
+// http://www.di.ens.fr/~zappa/readings/ppopp13.pdf
 class work_steal_queue {
-	aligned_array<void*, LIBASYNC_CACHELINE_SIZE> items;
-	spinlock lock;
-	std::atomic<std::size_t> atomic_head, atomic_tail;
+	// Circular array of atomic<void*>
+	class circular_array {
+	public:
+		circular_array(std::size_t n)
+			: items(n) {}
+
+		std::size_t size() const
+		{
+			return items.size();
+		}
+
+		void* get(std::size_t index)
+		{
+			return items[index & (size() - 1)].load(std::memory_order_relaxed);
+		}
+
+		void put(std::size_t index, void* x)
+		{
+			items[index & (size() - 1)].store(x, std::memory_order_relaxed);
+		}
+
+		// Growing the array returns a new circular_array object and keeps a
+		// linked list of all previous arrays. This is done because other threads
+		// could still be accessing elements from the smaller arrays.
+		circular_array* grow(std::size_t top, std::size_t bottom)
+		{
+			circular_array* new_array = new circular_array(size() * 2);
+			new_array->previous.reset(this);
+			for (std::size_t i = top; i != bottom; i++)
+				new_array->put(i, get(i));
+			return new_array;
+		}
+
+	private:
+		aligned_array<std::atomic<void*>, LIBASYNC_CACHELINE_SIZE> items;
+		std::unique_ptr<circular_array> previous;
+	};
+
+	std::atomic<circular_array*> array;
+	std::atomic<std::size_t> top, bottom;
+
+	// Convert a 2's complement unsigned value to a signed value. We need to do
+	// this because (b - t) may not always be positive.
+	static std::ptrdiff_t to_signed(std::size_t x)
+	{
+		// Unsigned to signed conversion is implementation-defined if the value
+		// doesn't fit, so we convert manually.
+		if (x > PTRDIFF_MAX)
+			return static_cast<std::ptrdiff_t>(x - PTRDIFF_MIN) + PTRDIFF_MIN;
+		else
+			return static_cast<std::ptrdiff_t>(x);
+	}
 
 public:
+	// Initialize the indices to 1 so that popping an empty queue does not cause
+	// an integer overflow when decrementing.
 	work_steal_queue()
-		: items(32), atomic_head(0), atomic_tail(0) {}
-
-	// Push a task to the tail of this thread's queue
-	void push(task_run_handle t)
+		: array(new circular_array(32)), top(1), bottom(1) {}
+	~work_steal_queue()
 	{
-		std::size_t tail = atomic_tail.load(std::memory_order_relaxed);
-
-		// Check if we have space to insert an element at the tail
-		if (tail == items.size()) {
-			// Lock the queue
-			std::lock_guard<spinlock> locked(lock);
-			std::size_t head = atomic_head.load(std::memory_order_relaxed);
-
-			// Resize the queue if it is more than 75% full
-			if (head <= items.size() / 4) {
-				aligned_array<void*, 64> new_items(items.size() * 2);
-				std::copy(items.get() + head, items.get() + tail, new_items.get());
-				items = std::move(new_items);
-			} else {
-				// Simply shift the items to free up space at the end
-				std::copy(items.get() + head, items.get() + tail, items.get());
-			}
-			tail -= head;
-			atomic_head.store(0, std::memory_order_relaxed);
-		}
-
-		// Now add the task
-		items[tail] = t.to_void_ptr();
-		atomic_tail.store(tail + 1, std::memory_order_release);
+		delete array.load(std::memory_order_relaxed);
 	}
 
-	// Pop a task from the tail of this thread's queue
+	// Push a task to the bottom of this thread's queue
+	void push(task_run_handle x)
+	{
+		std::size_t b = bottom.load(std::memory_order_relaxed);
+		std::size_t t = top.load(std::memory_order_acquire);
+		circular_array* a = array.load(std::memory_order_relaxed);
+
+		// Grow the array if it is full
+		if (to_signed(b - t) >= to_signed(a->size())) {
+			a = a->grow(t, b);
+			array.store(a, std::memory_order_release);
+		}
+
+		// Note that we only convert to void* here in case grow throws due to
+		// lack of memory.
+		a->put(b, x.to_void_ptr());
+		bottom.store(b + 1, std::memory_order_release);
+	}
+
+	// Pop a task from the bottom of this thread's queue
 	void* pop()
 	{
-		std::size_t tail = atomic_tail.load(std::memory_order_relaxed);
+		std::size_t b = bottom.load(std::memory_order_relaxed);
 
 		// Early exit if queue is empty
-		if (atomic_head.load(std::memory_order_relaxed) >= tail)
+		std::size_t t = top.load(std::memory_order_relaxed);
+		if (to_signed(b - t) <= 0)
 			return nullptr;
 
-		// Make sure tail is stored before we read head
-		atomic_tail.store(--tail, std::memory_order_relaxed);
+		// Make sure bottom is stored before top is read
+		bottom.store(--b, std::memory_order_relaxed);
 		std::atomic_thread_fence(std::memory_order_seq_cst);
+		t = top.load(std::memory_order_relaxed);
 
-		// Race to the queue
-		if (atomic_head.load(std::memory_order_relaxed) <= tail)
-			return items[tail];
-
-		// There is a concurrent steal or no items, lock the queue and try again
-		std::lock_guard<spinlock> locked(lock);
-
-		// Check if the item is still available
-		if (atomic_head.load(std::memory_order_relaxed) <= tail)
-			return items[tail];
-
-		// Otherwise restore the tail and fail
-		atomic_tail.store(tail + 1, std::memory_order_relaxed);
-		return nullptr;
-	}
-
-	// Steal a task from the head of this thread's queue
-	void* steal()
-	{
-		// Lock the queue to prevent concurrent steals
-		std::lock_guard<spinlock> locked(lock);
-
-		// Make sure head is stored before we read tail
-		std::size_t head = atomic_head.load(std::memory_order_relaxed);
-		atomic_head.store(head + 1, std::memory_order_relaxed);
-		std::atomic_thread_fence(std::memory_order_seq_cst);
-
-		// Check if there is a task to steal
-		if (head < atomic_tail.load(std::memory_order_relaxed)) {
-			// Need acquire fence to synchronise with concurrent push
-			std::atomic_thread_fence(std::memory_order_acquire);
-			return items[head];
+		// If the queue is empty, restore bottom and exit
+		if (to_signed(b - t) < 0) {
+			bottom.store(b + 1, std::memory_order_relaxed);
+			return nullptr;
 		}
 
-		// Otherwise restore the head and fail
-		atomic_head.store(head, std::memory_order_relaxed);
-		return nullptr;
+		// Fetch the element from the queue
+		circular_array* a = array.load(std::memory_order_relaxed);
+		void* x = a->get(b);
+
+		// If this was the last element in the queue, check for races
+		if (b == t) {
+			if (!top.compare_exchange_strong(t, t + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+				x = nullptr;
+			bottom.store(b + 1, std::memory_order_relaxed);
+		}
+		return x;
+	}
+
+	// Steal a task from the top of this thread's queue
+	void* steal()
+	{
+		// Loop while the compare_exchange fails. This is still lock-free because
+		// a fail means that another thread has sucessfully stolen a task.
+		while (true) {
+			// Make sure top is read before bottom
+			std::size_t t = top.load(std::memory_order_relaxed);
+			std::atomic_thread_fence(std::memory_order_seq_cst);
+			std::size_t b = bottom.load(std::memory_order_relaxed);
+
+			// Exit if the queue is empty
+			if (to_signed(b - t) <= 0)
+				return nullptr;
+
+			// Fetch the element from the queue
+			std::atomic_thread_fence(std::memory_order_acquire);
+			circular_array* a = array.load(std::memory_order_consume);
+			void* x = a->get(t);
+
+			// Attempt to increment top
+			if (top.compare_exchange_weak(t, t + 1, std::memory_order_release, std::memory_order_relaxed))
+				return x;
+		}
 	}
 };
 
