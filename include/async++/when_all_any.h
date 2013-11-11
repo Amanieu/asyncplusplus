@@ -130,7 +130,7 @@ void when_all_variadic(when_all_state_variadic<State>* state_ptr, First&& first,
 		first.then(inline_scheduler(), [state_ptr](typename std::decay<First>::type t) {
 			detail::ref_count_ptr<when_all_state_variadic<State>> state(state_ptr);
 			LIBASYNC_TRY {
-				if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::COMPLETED)
+				if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
 					std::get<index>(state->results) = detail::get_internal_task(t)->get_result(t);
 				else
 					state->event.set_exception(detail::get_internal_task(t)->except);
@@ -160,7 +160,7 @@ void when_any_variadic(when_any_state<State>* state_ptr, First&& first, T&&... t
 		first.then(inline_scheduler(), [state_ptr](typename std::decay<First>::type t) {
 			detail::ref_count_ptr<when_any_state<State>> state(state_ptr);
 			LIBASYNC_TRY {
-				if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::COMPLETED)
+				if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
 					state->set(index, detail::get_internal_task(t)->get_result(t));
 				else
 					state->event.set_exception(detail::get_internal_task(t)->except);
@@ -206,7 +206,7 @@ task<typename detail::when_all_state_range<typename std::iterator_traits<Iter>::
 			(*begin).then(inline_scheduler(), [state_ptr, i](task_type t) {
 				detail::ref_count_ptr<detail::when_all_state_range<result_type>> state(state_ptr);
 				LIBASYNC_TRY {
-					if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::COMPLETED)
+					if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
 						state->set(i, detail::get_internal_task(t)->get_result(t));
 					else
 						state->event.set_exception(detail::get_internal_task(t)->except);
@@ -248,7 +248,7 @@ task<typename detail::when_any_state<typename std::iterator_traits<Iter>::value_
 			(*begin).then(inline_scheduler(), [state_ptr, i](task_type t) {
 				detail::ref_count_ptr<detail::when_any_state<result_type>> state(state_ptr);
 				LIBASYNC_TRY {
-					if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::COMPLETED)
+					if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
 						state->set(i, detail::get_internal_task(t)->get_result(t));
 					else
 						state->event.set_exception(detail::get_internal_task(t)->except);

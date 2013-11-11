@@ -29,16 +29,16 @@ namespace detail {
 // Intel C++ seems to get confused by enum class, so just use a normal enum.
 // We can still access elements using the task_state:: scope.
 enum task_state: unsigned char {
-	PENDING, // Task has not completed yet
-	LOCKED, // Task is locked (used by event_task to prevent double set)
-	COMPLETED, // Task has finished execution and a result is available
-	CANCELED // Task has been canceled and an exception is available
+	pending, // Task has not completed yet
+	locked, // Task is locked (used by event_task to prevent double set)
+	completed, // Task has finished execution and a result is available
+	canceled // Task has been canceled and an exception is available
 };
 
 // Determine whether a task is in a final state
 inline bool is_finished(task_state s)
 {
-	return s == task_state::COMPLETED || s == task_state::CANCELED;
+	return s == task_state::completed || s == task_state::canceled;
 }
 
 // Operations for dispatch function
@@ -181,7 +181,7 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 
 	// Initialize task state
 	task_base()
-		: state(task_state::PENDING) {}
+		: state(task_state::pending) {}
 
 	// Destroy task function and result in destructor
 	~task_base()
@@ -243,13 +243,13 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 
 		// Otherwise run the continuation directly
 		std::atomic_thread_fence(std::memory_order_acquire);
-		run_continuation(std::move(cont), current_state == task_state::CANCELED);
+		run_continuation(std::move(cont), current_state == task_state::canceled);
 	}
 
 	// Cancel the task with an exception
 	void cancel(std::exception_ptr cancel_exception)
 	{
-		// Destroy the function object in the task before cancelling
+		// Destroy the function object in the task before canceling
 		dispatch(this, dispatch_op::cancel_hook);
 		cancel_base(std::move(cancel_exception));
 	}
@@ -259,14 +259,14 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 	void cancel_base(std::exception_ptr cancel_exception)
 	{
 		except = std::move(cancel_exception);
-		state.store(task_state::CANCELED, std::memory_order_release);
+		state.store(task_state::canceled, std::memory_order_release);
 		run_continuations(true);
 	}
 
 	// Finish the task after it has been executed and the result set
 	void finish()
 	{
-		state.store(task_state::COMPLETED, std::memory_order_release);
+		state.store(task_state::completed, std::memory_order_release);
 		run_continuations(false);
 	}
 
@@ -295,7 +295,7 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 	// Wait and throw the exception if the task was canceled
 	void wait_and_throw()
 	{
-		if (wait() == task_state::CANCELED) {
+		if (wait() == task_state::canceled) {
 #ifdef LIBASYNC_NO_EXCEPTIONS
 			std::abort();
 #else
@@ -345,7 +345,7 @@ struct task_result: public task_base {
 		if (op == dispatch_op::destroy) {
 			// Result is only present if the task completed successfully
 			task_result* current_task = static_cast<task_result*>(t);
-			if (current_task->state.load(std::memory_order_relaxed) == task_state::COMPLETED)
+			if (current_task->state.load(std::memory_order_relaxed) == task_state::completed)
 				reinterpret_cast<Result*>(&current_task->result)->~Result();
 		}
 	}
@@ -510,14 +510,14 @@ struct task_func: public task_result<Result>, private func_holder<Func> {
 			break;
 
 		case dispatch_op::cancel_hook:
-			// Destroy the function object when cancelling since it won't be
+			// Destroy the function object when canceling since it won't be
 			// used anymore.
 			current_task->destroy_func();
 			break;
 
 		case dispatch_op::destroy:
 			// If the task hasn't completed yet, destroy the function object.
-			if (current_task->state.load(std::memory_order_relaxed) == task_state::PENDING)
+			if (current_task->state.load(std::memory_order_relaxed) == task_state::pending)
 				current_task->destroy_func();
 
 			// Then destroy the result
@@ -552,7 +552,7 @@ struct unwrapped_func {
 	{
 		// Forward completion state and result to parent task
 		LIBASYNC_TRY {
-			if (get_internal_task(child_task)->state.load(std::memory_order_relaxed) == task_state::COMPLETED) {
+			if (get_internal_task(child_task)->state.load(std::memory_order_relaxed) == task_state::completed) {
 				static_cast<task_result<Result>*>(parent_task.get())->set_result(get_internal_task(child_task)->get_result(child_task));
 				parent_task->finish();
 			} else

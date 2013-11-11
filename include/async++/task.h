@@ -141,8 +141,8 @@ protected:
 #endif
 
 		// Only allow setting the value once
-		detail::task_state expected = detail::task_state::PENDING;
-		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::LOCKED, std::memory_order_acquire, std::memory_order_relaxed))
+		detail::task_state expected = detail::task_state::pending;
+		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::locked, std::memory_order_acquire, std::memory_order_relaxed))
 			return false;
 
 		LIBASYNC_TRY {
@@ -216,8 +216,8 @@ public:
 #endif
 
 		// Only allow setting the value once
-		detail::task_state expected = detail::task_state::PENDING;
-		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::LOCKED, std::memory_order_acquire, std::memory_order_relaxed))
+		detail::task_state expected = detail::task_state::pending;
+		if (!internal_task->state.compare_exchange_strong(expected, detail::task_state::locked, std::memory_order_acquire, std::memory_order_relaxed))
 			return false;
 
 		// Cancel the task
@@ -508,7 +508,7 @@ task<typename std::decay<T>::type> make_task(T&& value)
 
 	out.internal_task = detail::task_ptr(new detail::task_result<typename std::decay<T>::type>);
 	detail::get_internal_task(out)->set_result(std::forward<T>(value));
-	out.internal_task->state.store(detail::task_state::COMPLETED, std::memory_order_relaxed);
+	out.internal_task->state.store(detail::task_state::completed, std::memory_order_relaxed);
 
 	return out;
 }
@@ -517,7 +517,7 @@ inline task<void> make_task()
 	task<void> out;
 
 	out.internal_task = detail::task_ptr(new detail::task_result<detail::fake_void>);
-	out.internal_task->state.store(detail::task_state::COMPLETED, std::memory_order_relaxed);
+	out.internal_task->state.store(detail::task_state::completed, std::memory_order_relaxed);
 
 	return out;
 }
