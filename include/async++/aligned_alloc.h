@@ -40,7 +40,7 @@ public:
 	{
 		ptr = static_cast<T*>(aligned_alloc(length * sizeof(T), Align));
 		for (std::size_t i = 0; i < length; i++)
-			new(&ptr[i]) T;
+			new(ptr + i) T;
 	}
 	aligned_array(aligned_array&& other)
 		: length(other.length), ptr(other.ptr)
