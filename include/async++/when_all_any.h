@@ -29,8 +29,8 @@ namespace detail {
 template<typename T>
 struct when_all_state_range: public ref_count_base<when_all_state_range<T>> {
 	typedef std::vector<T> task_type;
-	task_type results;
 	event_task<task_type> event;
+	task_type results;
 
 	when_all_state_range(std::size_t count)
 		: ref_count_base<when_all_state_range<T>>(count), results(count) {}
@@ -77,8 +77,8 @@ struct when_all_state_range<void>: public ref_count_base<when_all_state_range<vo
 // when_all shared state for varidic arguments
 template<typename Tuple>
 struct when_all_state_variadic: public ref_count_base<when_all_state_variadic<Tuple>> {
-	Tuple results;
 	event_task<Tuple> event;
+	Tuple results;
 
 	when_all_state_variadic()
 		: ref_count_base<when_all_state_variadic<Tuple>>(std::tuple_size<Tuple>::value) {}

@@ -146,7 +146,7 @@ public:
 };
 
 // Type-generic base task object
-struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
+struct task_base: public ref_count_base<task_base> {
 	// Task state
 	std::atomic<task_state> state;
 
