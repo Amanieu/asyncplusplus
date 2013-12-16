@@ -75,6 +75,15 @@
 # define LIBASYNC_CATCH(...) catch (__VA_ARGS__)
 #endif
 
+// Annotate move constructors and move assignment with noexcept to allow objects
+// to be moved if they are in containers. Compilers which don't support noexcept
+// will usually move regardless.
+#ifdef __GNUC__
+#define LIBASYNC_NOEXCEPT noexcept
+#else
+#define LIBASYNC_NOEXCEPT
+#endif
+
 // Cacheline alignment to avoid false sharing between different threads
 #define LIBASYNC_CACHELINE_SIZE 64
 #ifdef __GNUC__

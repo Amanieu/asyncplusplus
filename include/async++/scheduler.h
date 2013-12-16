@@ -86,9 +86,9 @@ class task_run_handle {
 	task_run_handle& operator=(const task_run_handle&);
 
 public:
-	task_run_handle(task_run_handle&& other)
+	task_run_handle(task_run_handle&& other) LIBASYNC_NOEXCEPT
 		: handle(std::move(other.handle)) {}
-	task_run_handle& operator=(task_run_handle&& other)
+	task_run_handle& operator=(task_run_handle&& other) LIBASYNC_NOEXCEPT
 	{
 		std::swap(handle, other.handle);
 		return *this;

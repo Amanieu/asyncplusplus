@@ -163,12 +163,12 @@ protected:
 	basic_event& operator=(const basic_event&);
 
 public:
-	basic_event(basic_event&& other)
+	basic_event(basic_event&& other) LIBASYNC_NOEXCEPT
 		: internal_task(std::move(other.internal_task))
 	{
 		other.internal_task = nullptr;
 	}
-	basic_event& operator=(basic_event&& other)
+	basic_event& operator=(basic_event&& other) LIBASYNC_NOEXCEPT
 	{
 		std::swap(internal_task, other.internal_task);
 		return *this;
@@ -250,9 +250,9 @@ class task: public detail::basic_task<Result> {
 
 public:
 	task() {}
-	task(task&& other)
+	task(task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_task<Result>(std::move(other)) {}
-	task& operator=(task&& other)
+	task& operator=(task&& other) LIBASYNC_NOEXCEPT
 	{
 		detail::basic_task<Result>::operator=(std::move(other));
 		return *this;
@@ -336,9 +336,9 @@ class event_task: public detail::basic_event<Result> {
 
 public:
 	event_task() {}
-	event_task(event_task&& other)
+	event_task(event_task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_event<Result>(std::move(other)) {}
-	event_task& operator=(event_task&& other)
+	event_task& operator=(event_task&& other) LIBASYNC_NOEXCEPT
 	{
 		detail::basic_event<Result>::operator=(std::move(other));
 		return *this;
@@ -364,9 +364,9 @@ class event_task<Result&>: public detail::basic_event<Result&> {
 
 public:
 	event_task() {}
-	event_task(event_task&& other)
+	event_task(event_task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_event<Result&>(std::move(other)) {}
-	event_task& operator=(event_task&& other)
+	event_task& operator=(event_task&& other) LIBASYNC_NOEXCEPT
 	{
 		detail::basic_event<Result&>::operator=(std::move(other));
 		return *this;
@@ -388,9 +388,9 @@ class event_task<void>: public detail::basic_event<void> {
 
 public:
 	event_task() {}
-	event_task(event_task&& other)
+	event_task(event_task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_event<void>(std::move(other)) {}
-	event_task& operator=(event_task&& other)
+	event_task& operator=(event_task&& other) LIBASYNC_NOEXCEPT
 	{
 		detail::basic_event<void>::operator=(std::move(other));
 		return *this;

@@ -72,7 +72,7 @@ public:
 		if (p)
 			p->add_ref();
 	}
-	ref_count_ptr(ref_count_ptr&& other)
+	ref_count_ptr(ref_count_ptr&& other) LIBASYNC_NOEXCEPT
 		: p(other.p)
 	{
 		other.p = nullptr;
@@ -93,7 +93,7 @@ public:
 			p->add_ref();
 		return *this;
 	}
-	ref_count_ptr& operator=(ref_count_ptr&& other)
+	ref_count_ptr& operator=(ref_count_ptr&& other) LIBASYNC_NOEXCEPT
 	{
 		std::swap(p, other.p);
 		return *this;

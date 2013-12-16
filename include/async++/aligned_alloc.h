@@ -42,13 +42,13 @@ public:
 		for (std::size_t i = 0; i < length; i++)
 			new(ptr + i) T;
 	}
-	aligned_array(aligned_array&& other)
+	aligned_array(aligned_array&& other) LIBASYNC_NOEXCEPT
 		: length(other.length), ptr(other.ptr)
 	{
 		other.ptr = nullptr;
 		other.length = 0;
 	}
-	aligned_array& operator=(aligned_array&& other)
+	aligned_array& operator=(aligned_array&& other) LIBASYNC_NOEXCEPT
 	{
 		std::swap(ptr, other.ptr);
 		std::swap(length, other.length);
