@@ -18,18 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#ifdef __linux__
-# include <unistd.h>
-# include <sys/syscall.h>
-# include <linux/futex.h>
-#elif defined(_WIN32)
-# define NOMINMAX
-# include <windows.h>
-#else
-# include <mutex>
-# include <condition_variable>
-#endif
-
 namespace async {
 namespace detail {
 

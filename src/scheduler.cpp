@@ -33,10 +33,6 @@
 
 #include <async++.h>
 
-#include "auto_reset_event.h"
-#include "fifo_queue.h"
-#include "work_steal_queue.h"
-
 // For posix_memalign/_aligned_malloc
 #ifdef _WIN32
 # include <malloc.h>
@@ -66,6 +62,28 @@
 #  define thread_local __thread
 # endif
 #endif
+
+// Used for auto_reset_event
+#ifdef __linux__
+# include <unistd.h>
+# include <sys/syscall.h>
+# include <linux/futex.h>
+#elif defined(_WIN32)
+# define NOMINMAX
+# include <windows.h>
+#else
+# include <mutex>
+# include <condition_variable>
+#endif
+
+// Force symbol visibility to hidden unless explicity exported
+#if defined(__GNUC__) && !defined(_WIN32)
+#pragma GCC visibility push(hidden)
+#endif
+
+#include "auto_reset_event.h"
+#include "fifo_queue.h"
+#include "work_steal_queue.h"
 
 namespace async {
 namespace detail {
@@ -524,3 +542,7 @@ scheduler& thread_scheduler()
 }
 
 } // namespace async
+
+#if defined(__GNUC__) && !defined(_WIN32)
+#pragma GCC visibility pop
+#endif
