@@ -159,14 +159,14 @@ static void remove_waiter(auto_reset_event& thread_event)
 }
 
 // Try to pop a task from the public queue
-static void* pop_public_queue()
+static task_run_handle pop_public_queue()
 {
 	std::lock_guard<spinlock> locked(public_queue_lock);
 	return public_queue->pop();
 }
 
 // Try to steal a task from another thread's queue
-static void* steal_task()
+static task_run_handle steal_task()
 {
 	// Make a list of victim thread ids and shuffle it
 	std::vector<std::size_t> victims(thread_data.size());
@@ -179,15 +179,14 @@ static void* steal_task()
 		if (i == thread_id)
 			continue;
 
-		void* t = thread_data[i].queue.steal();
-		if (t)
+		if (task_run_handle t = thread_data[i].queue.steal())
 			return t;
 	}
 
 	// No tasks found, but we might have missed one if it was just added. In
 	// practice this doesn't really matter since it will be handled by another
 	// thread.
-	return nullptr;
+	return task_run_handle();
 }
 
 // Wait for a task to complete (for worker threads inside thread pool)
@@ -206,21 +205,21 @@ static void threadpool_wait_handler(task_wait_handle wait_task)
 			return;
 
 		// Try to get a task from the local queue
-		if (void* t = current_thread.queue.pop()) {
-			task_run_handle::from_void_ptr(t).run();
+		if (task_run_handle t = current_thread.queue.pop()) {
+			t.run();
 			continue;
 		}
 
 		while (true) {
 			// Try to fetch from the public queue
-			if (void* t = pop_public_queue()) {
-				task_run_handle::from_void_ptr(t).run();
+			if (task_run_handle t = pop_public_queue()) {
+				t.run();
 				break;
 			}
 
 			// Try to steal a task
-			if (void* t = steal_task()) {
-				task_run_handle::from_void_ptr(t).run();
+			if (task_run_handle t = steal_task()) {
+				t.run();
 				break;
 			}
 
@@ -293,16 +292,16 @@ static void worker_thread(std::size_t id)
 	// Main loop
 	while (true) {
 		// Try to get a task from the local queue
-		if (void* t = current_thread.queue.pop()) {
-			task_run_handle::from_void_ptr(t).run();
+		if (task_run_handle t = current_thread.queue.pop()) {
+			t.run();
 			continue;
 		}
 
 		// Stealing loop
 		while (true) {
 			// Try to fetch from the public queue
-			if (void* t = pop_public_queue()) {
-				task_run_handle::from_void_ptr(t).run();
+			if (task_run_handle t = pop_public_queue()) {
+				t.run();
 				break;
 			}
 
@@ -313,8 +312,8 @@ static void worker_thread(std::size_t id)
 			}
 
 			// Try to steal a task
-			if (void* t = steal_task()) {
-				task_run_handle::from_void_ptr(t).run();
+			if (task_run_handle t = steal_task()) {
+				t.run();
 				break;
 			}
 
@@ -332,8 +331,8 @@ static void worker_thread(std::size_t id)
 			}
 
 			// Check the public queue, for the same reason
-			if (void* t = pop_public_queue()) {
-				task_run_handle::from_void_ptr(t).run();
+			if (task_run_handle t = pop_public_queue()) {
+				t.run();
 				break;
 			}
 
@@ -414,8 +413,8 @@ public:
 		shutdown_complete_event.wait();
 
 		// Flush the public queue
-		while (void* t = pop_public_queue())
-			task_run_handle::from_void_ptr(t).run();
+		while (task_run_handle t = pop_public_queue())
+			t.run();
 
 		// Release resources
 		public_queue = nullptr;
@@ -515,35 +514,37 @@ void wait_for_task(task_base* wait_task)
 }
 
 // Singleton wrapper class
-template<typename T>
-class singleton {
 #if defined(__GNUC__) && !defined(__INTEL_COMPILER)
 // C++11 guarantees thread safety for static initialization
-
+template<typename T>
+class singleton {
 public:
 	static T& get_instance()
 	{
 		static T instance;
 		return instance;
 	}
+};
 #else
 // Intel and MSVC don't support thread-safe static initialization, so emulate it
-
-// Deleter to ensure the object is destroyed
-struct deleter {
-	~deleter()
-	{
-		bool is_init = init_flag.load(std::memory_order_relaxed);
-		if (is_init) {
-			std::atomic_thread_fence(std::memory_order_acquire);
-			reinterpret_cast<T*>(&storage)->~T();
+template<typename T>
+class singleton {
+	// Deleter to ensure the object is destroyed
+	struct deleter {
+		~deleter()
+		{
+			bool is_init = init_flag.load(std::memory_order_relaxed);
+			if (is_init) {
+				std::atomic_thread_fence(std::memory_order_acquire);
+				reinterpret_cast<T*>(&storage)->~T();
+			}
 		}
-	}
-};
-static std::mutex lock;
-static std::atomic<bool> init_flag;
-static typename std::aligned_storage<sizeof(T), std::alignment_of<T>::value>::type storage;
-static deleter deleter_record;
+	};
+
+	static std::mutex lock;
+	static std::atomic<bool> init_flag;
+	static typename std::aligned_storage<sizeof(T), std::alignment_of<T>::value>::type storage;
+	static deleter deleter_record;
 
 public:
 	static T& get_instance()
@@ -559,10 +560,8 @@ public:
 		}
 		return *instance;
 	}
-#endif
 };
 
-#if !defined(__GNUC__) || defined(__INTEL_COMPILER)
 template<typename T> std::mutex singleton<T>::lock;
 template<typename T> std::atomic<bool> singleton<T>::init_flag;
 template<typename T> typename std::aligned_storage<sizeof(T), std::alignment_of<T>::value>::type singleton<T>::storage;

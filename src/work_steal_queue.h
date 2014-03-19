@@ -114,14 +114,14 @@ public:
 	}
 
 	// Pop a task from the bottom of this thread's queue
-	void* pop()
+	task_run_handle pop()
 	{
 		std::size_t b = bottom.load(std::memory_order_relaxed);
 
 		// Early exit if queue is empty
 		std::size_t t = top.load(std::memory_order_relaxed);
 		if (to_signed(b - t) <= 0)
-			return nullptr;
+			return task_run_handle();
 
 		// Make sure bottom is stored before top is read
 		bottom.store(--b, std::memory_order_relaxed);
@@ -131,7 +131,7 @@ public:
 		// If the queue is empty, restore bottom and exit
 		if (to_signed(b - t) < 0) {
 			bottom.store(b + 1, std::memory_order_relaxed);
-			return nullptr;
+			return task_run_handle();
 		}
 
 		// Fetch the element from the queue
@@ -140,15 +140,17 @@ public:
 
 		// If this was the last element in the queue, check for races
 		if (b == t) {
-			if (!top.compare_exchange_strong(t, t + 1, std::memory_order_relaxed, std::memory_order_relaxed))
-				x = nullptr;
+			if (!top.compare_exchange_strong(t, t + 1, std::memory_order_relaxed, std::memory_order_relaxed)) {
+				bottom.store(b + 1, std::memory_order_relaxed);
+				return task_run_handle();
+			}
 			bottom.store(b + 1, std::memory_order_relaxed);
 		}
-		return x;
+		return task_run_handle::from_void_ptr(x);
 	}
 
 	// Steal a task from the top of this thread's queue
-	void* steal()
+	task_run_handle steal()
 	{
 		// Loop while the compare_exchange fails. This is still lock-free because
 		// a fail means that another thread has sucessfully stolen a task.
@@ -160,7 +162,7 @@ public:
 
 			// Exit if the queue is empty
 			if (to_signed(b - t) <= 0)
-				return nullptr;
+				return task_run_handle();
 
 			// Fetch the element from the queue
 			std::atomic_thread_fence(std::memory_order_acquire);
@@ -169,7 +171,7 @@ public:
 
 			// Attempt to increment top
 			if (top.compare_exchange_weak(t, t + 1, std::memory_order_release, std::memory_order_relaxed))
-				return x;
+				return task_run_handle::from_void_ptr(x);
 		}
 	}
 };

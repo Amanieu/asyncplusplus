@@ -47,15 +47,15 @@ public:
 	}
 
 	// Pop a task from the front of the queue
-	void* pop()
+	task_run_handle pop()
 	{
 		// See if an item is available
 		if (head == tail)
-			return nullptr;
+			return task_run_handle();
 		else {
-			void* task = items[head];
+			void* x = items[head];
 			head = (head + 1) & (items.size() - 1);
-			return task;
+			return task_run_handle::from_void_ptr(x);
 		}
 	}
 };
