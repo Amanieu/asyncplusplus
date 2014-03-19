@@ -18,12 +18,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-namespace async {
-namespace detail {
+#ifndef ASYNCXX_H_
+# error "Do not include this header directly, include <async++.h> instead."
+#endif
 
-// Queue used to hold tasks from outside the thread pool, in FIFO order
+namespace async {
+
+// Queue which holds tasks in FIFO order. Note that this queue is not
+// thread-safe and must be protected by a lock.
 class fifo_queue {
-	aligned_array<void*, LIBASYNC_CACHELINE_SIZE> items;
+	detail::aligned_array<void*, LIBASYNC_CACHELINE_SIZE> items;
 	std::size_t head, tail;
 
 public:
@@ -35,7 +39,7 @@ public:
 	{
 		// Resize queue if it is full
 		if (head == ((tail + 1) & (items.size() - 1))) {
-			aligned_array<void*, 64> new_items(items.size() * 2);
+			detail::aligned_array<void*, LIBASYNC_CACHELINE_SIZE> new_items(items.size() * 2);
 			for (std::size_t i = 0; i < tail - head; i++)
 				new_items[i] = items[(i + head) & (items.size() - 1)];
 			items = std::move(new_items);
@@ -60,5 +64,4 @@ public:
 	}
 };
 
-} // namespace detail
 } // namespace async

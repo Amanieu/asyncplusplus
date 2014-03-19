@@ -18,8 +18,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#ifndef ASYNCXX_H_
+# error "Do not include this header directly, include <async++.h> instead."
+#endif
+
 namespace async {
-namespace detail {
 
 // Chase-Lev work stealing deque
 //
@@ -63,7 +66,7 @@ class work_steal_queue {
 		}
 
 	private:
-		aligned_array<std::atomic<void*>, LIBASYNC_CACHELINE_SIZE> items;
+		detail::aligned_array<std::atomic<void*>, LIBASYNC_CACHELINE_SIZE> items;
 		std::unique_ptr<circular_array> previous;
 	};
 
@@ -176,5 +179,4 @@ public:
 	}
 };
 
-} // namespace detail
 } // namespace async

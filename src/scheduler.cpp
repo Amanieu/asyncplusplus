@@ -82,8 +82,6 @@
 #endif
 
 #include "auto_reset_event.h"
-#include "fifo_queue.h"
-#include "work_steal_queue.h"
 
 namespace async {
 namespace detail {
