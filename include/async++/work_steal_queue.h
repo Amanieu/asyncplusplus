@@ -45,12 +45,12 @@ class work_steal_queue {
 
 		void* get(std::size_t index)
 		{
-			return items[index & (size() - 1)].load(std::memory_order_relaxed);
+			return items[index & (size() - 1)];
 		}
 
 		void put(std::size_t index, void* x)
 		{
-			items[index & (size() - 1)].store(x, std::memory_order_relaxed);
+			items[index & (size() - 1)] = x;
 		}
 
 		// Growing the array returns a new circular_array object and keeps a
@@ -66,7 +66,7 @@ class work_steal_queue {
 		}
 
 	private:
-		detail::aligned_array<std::atomic<void*>, LIBASYNC_CACHELINE_SIZE> items;
+		detail::aligned_array<void*, LIBASYNC_CACHELINE_SIZE> items;
 		std::unique_ptr<circular_array> previous;
 	};
 
