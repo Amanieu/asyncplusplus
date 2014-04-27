@@ -592,7 +592,7 @@ struct root_exec_func<Result, Func, true>: private func_base<Func> {
 		: func_base<Func>(std::forward<F>(f)) {}
 	void operator()(task_base* t)
 	{
-		unwrapped_finish<Result, root_exec_func>(t, std::move(std::move(this->get_func()))());
+		unwrapped_finish<Result, root_exec_func>(t, std::move(this->get_func())());
 	}
 };
 
@@ -631,8 +631,7 @@ struct continuation_exec_func<Parent, Result, Func, false, true>: private func_b
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
-		typedef typename detail::void_to_fake_void<typename Parent::result_type>::type internal_result;
-		unwrapped_finish<internal_result, continuation_exec_func>(t, invoke_fake_void(std::move(this->get_func()), std::move(parent)));
+		unwrapped_finish<Result, continuation_exec_func>(t, invoke_fake_void(std::move(this->get_func()), std::move(parent)));
 	}
 	Parent parent;
 };
@@ -644,8 +643,7 @@ struct continuation_exec_func<Parent, Result, Func, true, true>: private func_ba
 	void operator()(task_base* t)
 	{
 		auto&& result = get_internal_task(parent)->get_result(parent);
-		typedef typename detail::void_to_fake_void<typename Parent::result_type>::type internal_result;
-		unwrapped_finish<internal_result, continuation_exec_func>(t, invoke_fake_void(std::move(this->get_func()), std::forward<decltype(result)>(result)));
+		unwrapped_finish<Result, continuation_exec_func>(t, invoke_fake_void(std::move(this->get_func()), std::forward<decltype(result)>(result)));
 	}
 	Parent parent;
 };
