@@ -28,6 +28,7 @@ namespace async {
 class task_run_handle;
 class LIBASYNC_EXPORT scheduler {
 public:
+    virtual ~scheduler(){}
 	// Schedule a task for execution.
 	virtual void schedule(task_run_handle t) = 0;
 };

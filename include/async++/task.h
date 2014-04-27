@@ -59,7 +59,7 @@ protected:
 
 	// Common code for then()
 	template<typename Func, typename Parent>
-	typename continuation_traits<Parent, Func>::task_type then_internal(scheduler& sched, Func&& f, Parent&& parent) const
+	typename continuation_traits<Parent, Func>::task_type then_internal(scheduler& sched, Func&& f, Parent&& parent, bool isErrorHandler = false) const
 	{
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects
@@ -69,7 +69,6 @@ protected:
 
 		// Save a copy of internal_task because it might get moved into exec_func
 		task_base* my_internal = internal_task.get();
-
 		// Create continuation
 		typedef typename continuation_traits<Parent, Func>::task_type::internal_result cont_internal_result;
 		typedef continuation_exec_func<typename std::decay<Parent>::type, cont_internal_result, typename std::decay<Func>::type, continuation_traits<Parent, Func>::is_value_cont::value, is_task<typename continuation_traits<Parent, Func>::result_type>::value> exec_func;
@@ -79,7 +78,7 @@ protected:
 		// Set continuation parameters
 		cont.internal_task->sched = std::addressof(sched);
 		cont.internal_task->always_cont = !continuation_traits<Parent, Func>::is_value_cont::value;
-
+        cont.internal_task->isErrorHandler = isErrorHandler;
 		// Add the continuation to this task
 		// Avoid an expensive ref-count modification since the task isn't shared yet
 		cont.internal_task->add_ref_unlocked();
@@ -274,10 +273,26 @@ public:
 		this->internal_task = nullptr;
 		return result;
 	}
+    
+    // Add a continuation to the task
+	template<typename Func>
+	typename detail::continuation_traits<task, Func>::task_type error(scheduler& sched, Func&& f)
+	{
+		auto result = this->then_internal(sched, std::forward<Func>(f), std::move(*this),true);
+		this->internal_task = nullptr;
+		return result;
+	}
+    
 	template<typename Func>
 	typename detail::continuation_traits<task, Func>::task_type then(Func&& f)
 	{
 		return then(LIBASYNC_DEFAULT_SCHEDULER, std::forward<Func>(f));
+	}
+    
+    template<typename Func>
+	typename detail::continuation_traits<task, Func>::task_type error(Func&& f)
+	{
+		return error(LIBASYNC_DEFAULT_SCHEDULER, std::forward<Func>(f));
 	}
 
 	// Create a shared_task from this task

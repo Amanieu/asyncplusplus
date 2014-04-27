@@ -152,7 +152,8 @@ struct task_base: public ref_count_base<task_base> {
 
 	// Whether this task should be run even if the parent was canceled
 	bool always_cont;
-
+    bool isErrorHandler;
+    bool executeFunctionCall;
 	// Vector of continuations and lock protecting it
 	spinlock lock;
 	continuation_vector continuations;
@@ -181,7 +182,7 @@ struct task_base: public ref_count_base<task_base> {
 
 	// Initialize task state
 	task_base()
-		: state(task_state::pending) {}
+		: state(task_state::pending),isErrorHandler(false),executeFunctionCall(true) {}
 
 	// Destroy task function and result in destructor
 	~task_base()
@@ -193,7 +194,8 @@ struct task_base: public ref_count_base<task_base> {
 	void run_continuation(task_ptr&& cont, bool cancel)
 	{
 		// Handle continuations that run even if the parent task is canceled
-		if (!cancel || cont->always_cont) {
+        cont->executeFunctionCall = !(cont->isErrorHandler && !cancel);
+		if (!cancel || cont->always_cont || (cancel&&cont->isErrorHandler)) {
 			scheduler& s = *cont->sched;
 			try {
 				schedule_task(s, std::move(cont));
@@ -606,7 +608,8 @@ struct continuation_exec_func: private func_base<Func> {
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
-		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), std::move(this->parent)));
+        if(t->executeFunctionCall)
+            static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), std::move(this->parent)));
 		t->finish();
 	}
 	Parent parent;
@@ -619,7 +622,8 @@ struct continuation_exec_func<Parent, Result, Func, true, false>: private func_b
 	void operator()(task_base* t)
 	{
 		auto&& result = get_internal_task(parent)->get_result(parent);
-		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), std::forward<decltype(result)>(result)));
+        if(t->executeFunctionCall)
+            static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), std::forward<decltype(result)>(result)));
 		t->finish();
 	}
 	Parent parent;
