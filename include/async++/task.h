@@ -195,14 +195,8 @@ public:
 			LIBASYNC_THROW(std::invalid_argument("Use of empty event_task object"));
 #endif
 
-		// Make sure this is only called once (ref_count == 1)
-		std::size_t expected = 1;
-		if (!internal_task->ref_count.compare_exchange_strong(expected, 2, std::memory_order_relaxed, std::memory_order_relaxed))
-			LIBASYNC_THROW(std::invalid_argument("event_task::get_task() called more than once"));
-
-		// Ref count is now 2, no need to increment it again
 		task<Result> out;
-		out.internal_task = detail::task_ptr(internal_task.get());
+		out.internal_task = internal_task;
 		return out;
 	}
 

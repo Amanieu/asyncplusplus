@@ -480,7 +480,7 @@ struct func_holder<Func, typename std::enable_if<std::is_empty<Func>::value>::ty
 // Task object with an associated function object
 // Using private inheritance so empty Func doesn't take up space
 template<typename Func, typename Result>
-struct task_func: public task_result<Result>, private func_holder<Func> {
+struct task_func: public task_result<Result>, func_holder<Func> {
 	template<typename... Args>
 	explicit task_func(Args&&... args)
 	{
@@ -497,10 +497,6 @@ struct task_func: public task_result<Result>, private func_holder<Func> {
 			LIBASYNC_TRY {
 				// Dispatch to execution function
 				current_task->get_func()(current_task);
-
-				// If we successfully ran, destroy the function object so that it
-				// can release any references (shared_ptr) it holds.
-				current_task->destroy_func();
 			} LIBASYNC_CATCH(task_canceled) {
 				// Optimize task_canceled by encoding it as a null exception_ptr
 				current_task->cancel(nullptr);
@@ -555,11 +551,14 @@ struct unwrapped_func {
 			if (get_internal_task(child_task)->state.load(std::memory_order_relaxed) == task_state::completed) {
 				static_cast<task_result<Result>*>(parent_task.get())->set_result(get_internal_task(child_task)->get_result(child_task));
 				parent_task->finish();
-			} else
-				static_cast<task_func<Func, Result>*>(parent_task.get())->cancel(get_internal_task(child_task)->except);
+			} else {
+				// We don't call the specialized cancel function here because
+				// the function of the parent task has already been destroyed.
+				parent_task->cancel_base(get_internal_task(child_task)->except);
+			}
 		} LIBASYNC_CATCH(...) {
 			// If the copy/move constructor of the result threw, propagate the exception
-			static_cast<task_func<Func, Result>*>(parent_task.get())->cancel(std::current_exception());
+			parent_task->cancel_base(std::current_exception());
 		}
 	}
 	task_ptr parent_task;
@@ -570,6 +569,10 @@ void unwrapped_finish(task_base* parent_base, Child child_task)
 	// Save a reference to the parent in the continuation
 	parent_base->add_ref();
 	child_task.then(inline_scheduler(), unwrapped_func<Result, Func, Child>(task_ptr(parent_base)));
+
+	// Destroy the parent task's function since it has been executed. Note that
+	// this is after the then() call which can potentially throw.
+	static_cast<task_func<Func, Result>*>(parent_base)->destroy_func();
 }
 
 // Execution functions for root tasks:
@@ -582,6 +585,7 @@ struct root_exec_func: private func_base<Func> {
 	void operator()(task_base* t)
 	{
 		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func())));
+		static_cast<task_func<root_exec_func, Result>*>(t)->destroy_func();
 		t->finish();
 	}
 };
@@ -607,6 +611,7 @@ struct continuation_exec_func: private func_base<Func> {
 	void operator()(task_base* t)
 	{
 		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), std::move(this->parent)));
+		static_cast<task_func<continuation_exec_func, Result>*>(t)->destroy_func();
 		t->finish();
 	}
 	Parent parent;
@@ -620,6 +625,7 @@ struct continuation_exec_func<Parent, Result, Func, true, false>: private func_b
 	{
 		auto&& result = get_internal_task(parent)->get_result(parent);
 		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), std::forward<decltype(result)>(result)));
+		static_cast<task_func<continuation_exec_func, Result>*>(t)->destroy_func();
 		t->finish();
 	}
 	Parent parent;
