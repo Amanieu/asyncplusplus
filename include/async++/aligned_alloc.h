@@ -30,6 +30,9 @@ LIBASYNC_EXPORT void aligned_free(void* addr);
 // Class representing an aligned array and its length
 template<typename T, std::size_t Align = std::alignment_of<T>::value>
 class aligned_array {
+	std::size_t length;
+	T* ptr;
+
 public:
 	aligned_array()
 		: length(0), ptr(nullptr) {}
@@ -88,10 +91,6 @@ public:
 	{
 		return ptr != nullptr;
 	}
-
-private:
-	std::size_t length;
-	T* ptr;
 };
 
 } // namespace detail

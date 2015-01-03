@@ -530,13 +530,18 @@ struct task_func: public task_result<Result>, func_holder<Func> {
 	}
 };
 
-// Helper function to access the internal_task member of a task object, which
+// Helper functions to access the internal_task member of a task object, which
 // avoids us having to specify half of the functions in the detail namespace
 // as friend. Also, internal_task is downcast to the appropriate task_result<>.
 template<typename Task>
 typename Task::internal_task_type* get_internal_task(const Task& t)
 {
 	return static_cast<typename Task::internal_task_type*>(t.internal_task.get());
+}
+template<typename Task>
+void set_internal_task(Task& t, task_ptr p)
+{
+	t.internal_task = std::move(p);
 }
 
 // Common code for task unwrapping

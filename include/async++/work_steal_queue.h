@@ -34,6 +34,9 @@ namespace async {
 class work_steal_queue {
 	// Circular array of void*
 	class circular_array {
+		detail::aligned_array<void*, LIBASYNC_CACHELINE_SIZE> items;
+		std::unique_ptr<circular_array> previous;
+
 	public:
 		circular_array(std::size_t n)
 			: items(n) {}
@@ -64,10 +67,6 @@ class work_steal_queue {
 				new_array->put(i, get(i));
 			return new_array;
 		}
-
-	private:
-		detail::aligned_array<void*, LIBASYNC_CACHELINE_SIZE> items;
-		std::unique_ptr<circular_array> previous;
 	};
 
 	std::atomic<circular_array*> array;

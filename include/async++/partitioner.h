@@ -56,6 +56,9 @@ inline std::size_t auto_grain_size(std::size_t dist)
 
 template<typename Iter>
 class static_partitioner_impl {
+	Iter iter_begin, iter_end;
+	std::size_t grain;
+
 public:
 	static_partitioner_impl(Iter begin, Iter end, std::size_t grain)
 		: iter_begin(begin), iter_end(end), grain(grain) {}
@@ -81,14 +84,15 @@ public:
 		out.iter_begin = iter_end;
 		return out;
 	}
-
-private:
-	Iter iter_begin, iter_end;
-	std::size_t grain;
 };
 
 template<typename Iter>
 class auto_partitioner_impl {
+	Iter iter_begin, iter_end;
+	std::size_t grain;
+	std::size_t num_threads;
+	std::thread::id last_thread;
+
 public:
 	// thread_id is initialized to "no thread" and will be set on first split
 	auto_partitioner_impl(Iter begin, Iter end, std::size_t grain)
@@ -128,12 +132,6 @@ public:
 		num_threads -= out.num_threads;
 		return out;
 	}
-
-private:
-	Iter iter_begin, iter_end;
-	std::size_t grain;
-	std::size_t num_threads;
-	std::thread::id last_thread;
 };
 
 } // namespace detail

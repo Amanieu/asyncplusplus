@@ -28,7 +28,6 @@ namespace detail {
 // Common code for task and shared_task
 template<typename Result>
 class basic_task {
-protected:
 	// Reference counted internal task object
 	detail::task_ptr internal_task;
 
@@ -39,10 +38,12 @@ protected:
 	typedef task_result<internal_result> internal_task_type;
 
 	// Friend access
-	template<typename T>
-	friend class basic_task;
+	friend async::task<Result>;
+	friend async::shared_task<Result>;
 	template<typename T>
 	friend typename T::internal_task_type* get_internal_task(const T& t);
+	template<typename T>
+	friend void set_internal_task(T& t, task_ptr p);
 
 	// Common code for get()
 	void get_internal() const
@@ -71,19 +72,19 @@ protected:
 		task_base* my_internal = internal_task.get();
 
 		// Create continuation
-		typedef typename continuation_traits<Parent, Func>::task_type::internal_result cont_internal_result;
+		typedef typename void_to_fake_void<typename continuation_traits<Parent, Func>::task_type::result_type>::type cont_internal_result;
 		typedef continuation_exec_func<typename std::decay<Parent>::type, cont_internal_result, typename std::decay<Func>::type, continuation_traits<Parent, Func>::is_value_cont::value, is_task<typename continuation_traits<Parent, Func>::result_type>::value> exec_func;
 		typename continuation_traits<Parent, Func>::task_type cont;
-		cont.internal_task = task_ptr(new task_func<exec_func, cont_internal_result>(std::forward<Func>(f), std::forward<Parent>(parent)));
+		set_internal_task(cont, task_ptr(new task_func<exec_func, cont_internal_result>(std::forward<Func>(f), std::forward<Parent>(parent))));
 
 		// Set continuation parameters
-		cont.internal_task->sched = &sched;
-		cont.internal_task->always_cont = !continuation_traits<Parent, Func>::is_value_cont::value;
+		get_internal_task(cont)->sched = &sched;
+		get_internal_task(cont)->always_cont = !continuation_traits<Parent, Func>::is_value_cont::value;
 
 		// Add the continuation to this task
 		// Avoid an expensive ref-count modification since the task isn't shared yet
-		cont.internal_task->add_ref_unlocked();
-		my_internal->add_continuation(task_ptr(cont.internal_task.get()));
+		get_internal_task(cont)->add_ref_unlocked();
+		my_internal->add_continuation(task_ptr(get_internal_task(cont)));
 
 		return cont;
 	}
@@ -120,7 +121,6 @@ public:
 // Common code for event_task specializations
 template<typename Result>
 class basic_event {
-protected:
 	// Reference counted internal task object
 	detail::task_ptr internal_task;
 
@@ -129,6 +129,9 @@ protected:
 
 	// Type-specific task object
 	typedef detail::task_result<internal_result> internal_task_type;
+
+	// Friend access
+	friend async::event_task<Result>;
 
 	// Common code for set()
 	template<typename T>
@@ -196,7 +199,7 @@ public:
 #endif
 
 		task<Result> out;
-		out.internal_task = internal_task;
+		set_internal_task(out, internal_task);
 		return out;
 	}
 
@@ -230,14 +233,6 @@ public:
 
 template<typename Result>
 class task: public detail::basic_task<Result> {
-	// Friend access for make_task, spawn and event_task::get_task
-	template<typename T>
-	friend task<typename std::decay<T>::type> make_task(T&& value);
-	friend task<void> make_task();
-	template<typename Func>
-	friend task<typename detail::remove_task<typename std::result_of<Func()>::type>::type> spawn(scheduler& sched, Func&& f);
-	friend class detail::basic_event<Result>;
-
 	// Movable but not copyable
 	task(const task&);
 	task& operator=(const task&);
@@ -278,7 +273,7 @@ public:
 	shared_task<Result> share()
 	{
 		shared_task<Result> out;
-		out.internal_task = std::move(this->internal_task);
+		detail::set_internal_task(out, std::move(this->internal_task));
 		return out;
 	}
 };
@@ -480,11 +475,11 @@ task<typename detail::remove_task<typename std::result_of<Func()>::type>::type> 
 	typedef typename detail::void_to_fake_void<typename detail::remove_task<decltype(std::declval<Func>()())>::type>::type internal_result;
 	typedef detail::root_exec_func<internal_result, typename std::decay<Func>::type, detail::is_task<decltype(std::declval<Func>()())>::value> exec_func;
 	task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> out;
-	out.internal_task = detail::task_ptr(new detail::task_func<exec_func, internal_result>(std::forward<Func>(f)));
+	detail::set_internal_task(out, detail::task_ptr(new detail::task_func<exec_func, internal_result>(std::forward<Func>(f))));
 
 	// Avoid an expensive ref-count modification since the task isn't shared yet
-	out.internal_task->add_ref_unlocked();
-	detail::schedule_task(sched, detail::task_ptr(out.internal_task.get()));
+	detail::get_internal_task(out)->add_ref_unlocked();
+	detail::schedule_task(sched, detail::task_ptr(detail::get_internal_task(out)));
 
 	return out;
 }
@@ -500,9 +495,9 @@ task<typename std::decay<T>::type> make_task(T&& value)
 {
 	task<typename std::decay<T>::type> out;
 
-	out.internal_task = detail::task_ptr(new detail::task_result<typename std::decay<T>::type>);
+	detail::set_internal_task(out, detail::task_ptr(new detail::task_result<typename std::decay<T>::type>));
 	detail::get_internal_task(out)->set_result(std::forward<T>(value));
-	out.internal_task->state.store(detail::task_state::completed, std::memory_order_relaxed);
+	detail::get_internal_task(out)->state.store(detail::task_state::completed, std::memory_order_relaxed);
 
 	return out;
 }
@@ -510,8 +505,8 @@ inline task<void> make_task()
 {
 	task<void> out;
 
-	out.internal_task = detail::task_ptr(new detail::task_result<detail::fake_void>);
-	out.internal_task->state.store(detail::task_state::completed, std::memory_order_relaxed);
+	detail::set_internal_task(out, detail::task_ptr(new detail::task_result<detail::fake_void>));
+	detail::get_internal_task(out)->state.store(detail::task_state::completed, std::memory_order_relaxed);
 
 	return out;
 }
