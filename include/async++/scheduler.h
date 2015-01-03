@@ -51,11 +51,7 @@ public:
 	// Check if the task has finished executing
 	bool ready() const
 	{
-		if (handle->state.load(std::memory_order_relaxed) >= detail::task_state::completed) {
-			std::atomic_thread_fence(std::memory_order_acquire);
-			return true;
-		} else
-			return false;
+		return detail::is_finished(handle->state.load(std::memory_order_acquire));
 	}
 
 	// Queue a function to be executed when the task has finished executing.

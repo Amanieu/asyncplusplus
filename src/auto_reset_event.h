@@ -39,7 +39,7 @@ public:
 	void wait()
 	{
 		// If futex_val goes below 0, sleep
-		if (futex_val.fetch_sub(1, std::memory_order_relaxed) <= 0) {
+		if (futex_val.fetch_sub(1, std::memory_order_acquire) <= 0) {
 			int ret;
 			do {
 				// Possible results:
@@ -51,8 +51,7 @@ public:
 			} while (ret == -1 && errno == EINTR);
 			if (ret == -1 && errno != EWOULDBLOCK)
 				throw std::system_error(errno, std::system_category());
-		} else
-			std::atomic_thread_fence(std::memory_order_acquire);
+		}
 	}
 
 	void reset()

@@ -537,19 +537,15 @@ class singleton {
 	// properly when the singleton is in a library that is unloaded.
 	~singleton()
 	{
-		bool is_init = init_flag.load(std::memory_order_relaxed);
-		if (is_init) {
-			std::atomic_thread_fence(std::memory_order_acquire);
+		if (init_flag.load(std::memory_order_acquire))
 			reinterpret_cast<T*>(&storage)->~T();
-		}
 	}
 
 public:
 	static T& get_instance()
 	{
-		bool is_init = instance.init_flag.load(std::memory_order_acquire);
 		T* ptr = reinterpret_cast<T*>(&instance.storage);
-		if (!is_init) {
+		if (!instance.init_flag.load(std::memory_order_acquire)) {
 			std::lock_guard<std::mutex> locked(instance.lock);
 			if (!instance.init_flag.load(std::memory_order_relaxed)) {
 				new(ptr) T;

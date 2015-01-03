@@ -438,9 +438,8 @@ public:
 
 		// Now spin until the reference count to drops to 1, since other threads
 		// may still have a reference to the task.
-		while (internal_task.ref_count.load(std::memory_order_relaxed) != 1)
+		while (internal_task.ref_count.load(std::memory_order_acquire) != 1)
 			detail::spinlock::spin_pause();
-		std::atomic_thread_fence(std::memory_order_acquire);
 	}
 
 	// Query whether the task has finished executing

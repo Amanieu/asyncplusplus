@@ -212,9 +212,8 @@ struct task_base: public ref_count_base<task_base> {
 		// Wait for any threads which may be adding a continuation. The lock is
 		// not needed afterwards because any future continuations are run
 		// directly instead of being added to the continuation list.
-		while (lock.get_atomic().load(std::memory_order_relaxed))
+		while (lock.get_atomic().load(std::memory_order_acquire))
 			spinlock::spin_pause();
-		std::atomic_thread_fence(std::memory_order_acquire);
 
 		// Early exit for common case of zero continuations
 		if (continuations.size() == 0)
@@ -273,22 +272,17 @@ struct task_base: public ref_count_base<task_base> {
 	// Check whether the task is ready and include an acquire barrier if it is
 	bool ready() const
 	{
-		if (is_finished(state.load(std::memory_order_relaxed))) {
-			std::atomic_thread_fence(std::memory_order_acquire);
-			return true;
-		} else
-			return false;
+		return is_finished(state.load(std::memory_order_acquire));
 	}
 
 	// Wait for the task to finish executing
 	task_state wait()
 	{
-		task_state s = state.load(std::memory_order_relaxed);
+		task_state s = state.load(std::memory_order_acquire);
 		if (!is_finished(s)) {
 			wait_for_task(this);
 			s = state.load(std::memory_order_relaxed);
-		} else
-			std::atomic_thread_fence(std::memory_order_acquire);
+		}
 		return s;
 	}
 
