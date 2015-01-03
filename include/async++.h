@@ -133,6 +133,7 @@ struct LIBASYNC_EXPORT task_canceled {};
 #include "async++/partitioner.h"
 #include "async++/parallel_invoke.h"
 #include "async++/parallel_for.h"
+#include "async++/parallel_reduce.h"
 #include "async++/fifo_queue.h"
 #include "async++/work_steal_queue.h"
 
