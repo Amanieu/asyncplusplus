@@ -77,7 +77,7 @@ protected:
 		cont.internal_task = task_ptr(new task_func<exec_func, cont_internal_result>(std::forward<Func>(f), std::forward<Parent>(parent)));
 
 		// Set continuation parameters
-		cont.internal_task->sched = std::addressof(sched);
+		cont.internal_task->sched = &sched;
 		cont.internal_task->always_cont = !continuation_traits<Parent, Func>::is_value_cont::value;
 
 		// Add the continuation to this task

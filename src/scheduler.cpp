@@ -527,43 +527,40 @@ public:
 // Intel and MSVC don't support thread-safe static initialization, so emulate it
 template<typename T>
 class singleton {
-	// Deleter to ensure the object is destroyed
-	struct deleter {
-		~deleter()
-		{
-			bool is_init = init_flag.load(std::memory_order_relaxed);
-			if (is_init) {
-				std::atomic_thread_fence(std::memory_order_acquire);
-				reinterpret_cast<T*>(&storage)->~T();
-			}
-		}
-	};
+	std::mutex lock;
+	std::atomic<bool> init_flag;
+	typename std::aligned_storage<sizeof(T), std::alignment_of<T>::value>::type storage;
 
-	static std::mutex lock;
-	static std::atomic<bool> init_flag;
-	static typename std::aligned_storage<sizeof(T), std::alignment_of<T>::value>::type storage;
-	static deleter deleter_record;
+	static singleton instance;
+
+	// Use a destructor instead of atexit() because the latter does not work
+	// properly when the singleton is in a library that is unloaded.
+	~singleton()
+	{
+		bool is_init = init_flag.load(std::memory_order_relaxed);
+		if (is_init) {
+			std::atomic_thread_fence(std::memory_order_acquire);
+			reinterpret_cast<T*>(&storage)->~T();
+		}
+	}
 
 public:
 	static T& get_instance()
 	{
-		bool is_init = init_flag.load(std::memory_order_acquire);
-		T* instance = reinterpret_cast<T*>(&storage);
+		bool is_init = instance.init_flag.load(std::memory_order_acquire);
+		T* ptr = reinterpret_cast<T*>(&instance.storage);
 		if (!is_init) {
-			std::lock_guard<std::mutex> locked(lock);
-			if (!init_flag.load(std::memory_order_relaxed)) {
-				new(instance) T;
-				init_flag.store(true, std::memory_order_release);
+			std::lock_guard<std::mutex> locked(instance.lock);
+			if (!instance.init_flag.load(std::memory_order_relaxed)) {
+				new(ptr) T;
+				instance.init_flag.store(true, std::memory_order_release);
 			}
 		}
-		return *instance;
+		return *ptr;
 	}
 };
 
-template<typename T> std::mutex singleton<T>::lock;
-template<typename T> std::atomic<bool> singleton<T>::init_flag;
-template<typename T> typename std::aligned_storage<sizeof(T), std::alignment_of<T>::value>::type singleton<T>::storage;
-template<typename T> typename singleton<T>::deleter singleton<T>::deleter_record;
+template<typename T> singleton<T> singleton<T>::instance;
 #endif
 
 } // namespace detail

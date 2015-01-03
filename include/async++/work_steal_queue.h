@@ -32,7 +32,7 @@ namespace async {
 // Correct and Efﬁcient Work-Stealing for Weak Memory Models
 // http://www.di.ens.fr/~zappa/readings/ppopp13.pdf
 class work_steal_queue {
-	// Circular array of atomic<void*>
+	// Circular array of void*
 	class circular_array {
 	public:
 		circular_array(std::size_t n)
@@ -87,10 +87,8 @@ class work_steal_queue {
 	}
 
 public:
-	// Initialize the indices to 1 so that popping an empty queue does not cause
-	// an integer overflow when decrementing.
 	work_steal_queue()
-		: array(new circular_array(32)), top(1), bottom(1) {}
+		: array(new circular_array(32)), top(0), bottom(0) {}
 	~work_steal_queue()
 	{
 		delete array.load(std::memory_order_relaxed);
