@@ -160,6 +160,8 @@ void when_any_variadic(when_any_state<State>*) {}
 template<std::size_t index, typename State, typename First, typename... T>
 void when_any_variadic(when_any_state<State>* state_ptr, First&& first, T&&... tasks)
 {
+	static_assert(std::is_same<State, typename std::decay<First>::type::result_type>::value, "All tasks given to when_any must have the same result type");
+
 	// Add a continuation to the task
 	LIBASYNC_TRY {
 		first.then(inline_scheduler(), [state_ptr](typename std::decay<First>::type t) {
