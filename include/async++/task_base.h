@@ -195,9 +195,9 @@ struct task_base: public ref_count_base<task_base> {
 		// Handle continuations that run even if the parent task is canceled
 		if (!cancel || cont->always_cont) {
 			scheduler& s = *cont->sched;
-			try {
+			LIBASYNC_TRY {
 				schedule_task(s, std::move(cont));
-			} catch (...) {
+			} LIBASYNC_CATCH(...) {
 				// This is suboptimal, but better than letting the exception leak
 				cont->cancel(std::current_exception());
 			}

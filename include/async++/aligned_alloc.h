@@ -39,8 +39,15 @@ public:
 		: length(length)
 	{
 		ptr = static_cast<T*>(aligned_alloc(length * sizeof(T), Align));
-		for (std::size_t i = 0; i < length; i++)
-			new(ptr + i) T;
+		std::size_t i;
+		LIBASYNC_TRY {
+			for (i = 0; i < length; i++)
+				new(ptr + i) T;
+		} LIBASYNC_CATCH(...) {
+			for (std::size_t j = 0; j < i; j++)
+				ptr[i].~T();
+			LIBASYNC_RETHROW();
+		}
 	}
 	aligned_array(aligned_array&& other) LIBASYNC_NOEXCEPT
 		: length(other.length), ptr(other.ptr)

@@ -86,7 +86,12 @@ struct when_all_state_variadic: public ref_count_base<when_all_state_variadic<Tu
 	// When all references are dropped, signal the event
 	~when_all_state_variadic()
 	{
-		event.set(std::move(results));
+		// Catch any potential exceptions from a move constructor
+		LIBASYNC_TRY {
+			event.set(std::move(results));
+		} LIBASYNC_CATCH(...) {
+			event.set_exception(std::current_exception());
+		}
 	}
 };
 
