@@ -146,7 +146,7 @@ void when_all_variadic(when_all_state_variadic<State>* state_ptr, First&& first,
 		});
 	} LIBASYNC_CATCH(...) {
 		// Make sure we don't leak memory if then() throws
-		state_ptr->release(sizeof...(T) + 1);
+		state_ptr->remove_ref(sizeof...(T) + 1);
 		LIBASYNC_RETHROW();
 	}
 
@@ -178,7 +178,7 @@ void when_any_variadic(when_any_state<State>* state_ptr, First&& first, T&&... t
 		});
 	} LIBASYNC_CATCH(...) {
 		// Make sure we don't leak memory if then() throws
-		state_ptr->release(sizeof...(T) + 1);
+		state_ptr->remove_ref(sizeof...(T) + 1);
 		LIBASYNC_RETHROW();
 	}
 

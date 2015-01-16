@@ -38,7 +38,7 @@ struct ref_count_base {
 	{
 		ref_count.fetch_add(count, std::memory_order_relaxed);
 	}
-	void release(std::size_t count = 1)
+	void remove_ref(std::size_t count = 1)
 	{
 		if (ref_count.fetch_sub(count, std::memory_order_release) == count) {
 			std::atomic_thread_fence(std::memory_order_acquire);
@@ -80,14 +80,14 @@ public:
 	ref_count_ptr& operator=(std::nullptr_t)
 	{
 		if (p)
-			p->release();
+			p->remove_ref();
 		p = nullptr;
 		return *this;
 	}
 	ref_count_ptr& operator=(const ref_count_ptr& other)
 	{
 		if (p)
-			p->release();
+			p->remove_ref();
 		p = other.p;
 		if (p)
 			p->add_ref();
@@ -101,7 +101,7 @@ public:
 	~ref_count_ptr()
 	{
 		if (p)
-			p->release();
+			p->remove_ref();
 	}
 
 	T& operator*() const
