@@ -102,6 +102,12 @@ public:
 	// Query whether the task has finished executing
 	bool ready() const
 	{
+#ifndef NDEBUG
+		// Catch use of uninitialized task objects
+		if (!internal_task)
+			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
+#endif
+
 		return internal_task->ready();
 	}
 
@@ -153,9 +159,11 @@ class basic_event {
 			static_cast<internal_task_type*>(internal_task.get())->set_result(std::forward<T>(result));
 			internal_task->finish();
 		} LIBASYNC_CATCH(...) {
-			// If the copy/move constructor of the result threw, save the exception.
-			// We could also return the exception to the caller, but this would
-			// cause race conditions.
+			// At this point we have already committed to setting a value, so
+			// we can't return the exception to the caller. If we did then it
+			// could cause concurrent set() calls to fail, thinking a value has
+			// already been set. Instead, we simply cancel the task with the
+			// exception we just got.
 			internal_task->cancel_base(std::current_exception());
 		}
 		return true;
@@ -251,6 +259,9 @@ public:
 	Result get()
 	{
 		this->get_internal();
+
+		// Move the internal state pointer so that the task becomes invalid,
+		// even if an exception is thrown.
 		detail::task_ptr my_internal = std::move(this->internal_task);
 		return detail::fake_void_to_void(static_cast<typename task::internal_task_type*>(my_internal.get())->get_result(*this));
 	}
@@ -259,9 +270,7 @@ public:
 	template<typename Func>
 	typename detail::continuation_traits<task, Func>::task_type then(scheduler& sched, Func&& f)
 	{
-		auto result = this->then_internal(sched, std::forward<Func>(f), std::move(*this));
-		this->internal_task = nullptr;
-		return result;
+		return this->then_internal(sched, std::forward<Func>(f), std::move(*this));
 	}
 	template<typename Func>
 	typename detail::continuation_traits<task, Func>::task_type then(Func&& f)
@@ -272,6 +281,12 @@ public:
 	// Create a shared_task from this task
 	shared_task<Result> share()
 	{
+#ifndef NDEBUG
+		// Catch use of uninitialized task objects
+		if (!this->internal_task)
+			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
+#endif
+
 		shared_task<Result> out;
 		detail::set_internal_task(out, std::move(this->internal_task));
 		return out;
@@ -280,9 +295,6 @@ public:
 
 template<typename Result>
 class shared_task: public detail::basic_task<Result> {
-	// Friend access for task::share
-	friend class task<Result>;
-
 	// get() return value: const Result& -or- void
 	typedef typename std::conditional<
 		std::is_void<Result>::value,
