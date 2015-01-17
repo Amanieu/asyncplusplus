@@ -115,9 +115,6 @@ class shared_task;
 template<typename Result>
 class event_task;
 
-// Exception thrown by cancel_current_task()
-struct LIBASYNC_EXPORT task_canceled {};
-
 } // namespace async
 
 // Include sub-headers

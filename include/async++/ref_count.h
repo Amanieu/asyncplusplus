@@ -49,6 +49,10 @@ struct ref_count_base {
 	{
 		ref_count.store(ref_count.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
 	}
+	bool is_unique_ref()
+	{
+		return ref_count.load(std::memory_order_relaxed) == 1;
+	}
 };
 
 // Pointer to reference counted object, based on boost::intrusive_ptr

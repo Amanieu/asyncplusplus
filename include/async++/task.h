@@ -23,6 +23,10 @@
 #endif
 
 namespace async {
+
+// Exception thrown when an event_task is destroyed without setting a value
+struct LIBASYNC_EXPORT abandoned_event_task {};
+
 namespace detail {
 
 // Common code for task and shared_task
@@ -111,6 +115,18 @@ public:
 		return internal_task->ready();
 	}
 
+	// Query whether the task has been canceled with an exception
+	bool canceled() const
+	{
+#ifndef NDEBUG
+		// Catch use of uninitialized task objects
+		if (!internal_task)
+			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
+#endif
+
+		return internal_task->state.load(std::memory_order_acquire) == task_state::canceled;
+	}
+
 	// Wait for the task to complete
 	void wait() const
 	{
@@ -121,6 +137,21 @@ public:
 #endif
 
 		internal_task->wait();
+	}
+
+	// Get the exception associated with a canceled task
+	std::exception_ptr get_exception() const
+	{
+#ifndef NDEBUG
+		// Catch use of uninitialized task objects
+		if (!internal_task)
+			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
+#endif
+
+		if (internal_task->wait() == task_state::canceled)
+			return internal_task->except;
+		else
+			return std::exception_ptr();
 	}
 };
 
@@ -192,9 +223,15 @@ public:
 	// Cancel events if they are destroyed before they are set
 	~basic_event()
 	{
-		// This has no effect if a result is already set
-		if (internal_task)
-			cancel();
+		// This check isn't thread-safe but set_exception does a proper check
+		if (internal_task && !internal_task->ready() && !internal_task->is_unique_ref()) {
+#ifdef LIBASYNC_NO_EXCEPTIONS
+			// This will result in an abort if the task result is read
+			set_exception(std::exception_ptr());
+#else
+			set_exception(std::make_exception_ptr(abandoned_event_task()));
+#endif
+		}
 	}
 
 	// Get a task linked to this event
@@ -228,12 +265,6 @@ public:
 		// Cancel the task
 		internal_task->cancel_base(std::move(except));
 		return true;
-	}
-
-	// Cancel the event as if with cancel_current_task
-	bool cancel() const
-	{
-		return set_exception(nullptr);
 	}
 };
 
@@ -418,7 +449,7 @@ class LIBASYNC_CACHELINE_ALIGN local_task {
 	typedef detail::root_exec_func<internal_result, typename std::decay<Func>::type, detail::is_task<decltype(std::declval<Func>()())>::value> exec_func;
 
 	// Task object embedded directly. The ref-count is initialized to 1 so it
-	// will never be freed using delete, only in destructor.
+	// will never be freed using delete, only when the local_task is destroyed.
 	detail::task_func<exec_func, internal_result> internal_task;
 
 	// Friend access for local_spawn
@@ -438,7 +469,7 @@ class LIBASYNC_CACHELINE_ALIGN local_task {
 
 	// Non-movable and non-copyable
 	local_task(const local_task&);
-	local_task(local_task &&);
+	local_task(local_task&&);
 	local_task& operator=(const local_task&);
 	local_task& operator=(local_task&&);
 
@@ -448,9 +479,9 @@ public:
 	{
 		wait();
 
-		// Now spin until the reference count to drops to 1, since other threads
+		// Now spin until the reference count drops to 1, since the scheduler
 		// may still have a reference to the task.
-		while (internal_task.ref_count.load(std::memory_order_acquire) != 1)
+		while (!internal_task.is_unique_ref())
 			detail::spinlock::spin_pause();
 	}
 
@@ -472,12 +503,20 @@ public:
 		internal_task.wait_and_throw();
 		return detail::fake_void_to_void(internal_task.get_result(task<result_type>()));
 	}
+
+	// Get the exception associated with a canceled task
+	std::exception_ptr get_exception() const
+	{
+		if (internal_task.wait() == detail::task_state::canceled)
+			return internal_task.except;
+		else
+			return std::exception_ptr();
+	}
 };
 
 // Spawn a function asynchronously
-// Using result_of instead of decltype here because Intel C++ gets confused by the previous friend declaration
 template<typename Func>
-task<typename detail::remove_task<typename std::result_of<Func()>::type>::type> spawn(scheduler& sched, Func&& f)
+task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn(scheduler& sched, Func&& f)
 {
 	// Make sure the function type is callable
 	static_assert(detail::is_callable<Func()>::value, "Invalid function type passed to spawn()");

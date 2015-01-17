@@ -293,10 +293,7 @@ struct task_base: public ref_count_base<task_base> {
 #ifdef LIBASYNC_NO_EXCEPTIONS
 			std::abort();
 #else
-			if (except)
-				std::rethrow_exception(except);
-			else
-				throw task_canceled();
+			std::rethrow_exception(except);
 #endif
 		}
 	}
@@ -491,9 +488,6 @@ struct task_func: public task_result<Result>, func_holder<Func> {
 			LIBASYNC_TRY {
 				// Dispatch to execution function
 				current_task->get_func()(current_task);
-			} LIBASYNC_CATCH(task_canceled) {
-				// Optimize task_canceled by encoding it as a null exception_ptr
-				current_task->cancel(nullptr);
 			} LIBASYNC_CATCH(...) {
 				current_task->cancel(std::current_exception());
 			}

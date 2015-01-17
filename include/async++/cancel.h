@@ -24,6 +24,9 @@
 
 namespace async {
 
+// Exception thrown by cancel_current_task()
+struct LIBASYNC_EXPORT task_canceled {};
+
 // A flag which can be used to request cancellation
 class cancellation_token {
 	std::atomic<bool> state;
