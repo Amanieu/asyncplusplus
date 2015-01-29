@@ -31,7 +31,7 @@ void parallel_for(scheduler& sched, Range&& range, const Func& func)
 	// Split the partition, run inline if no more splits are possible
 	auto partitioner = async::to_partitioner(std::forward<Range>(range));
 	auto subpart = partitioner.split();
-	if (std::begin(subpart) == std::end(subpart)) {
+	if (subpart.begin() == subpart.end()) {
 		for (auto&& i: partitioner)
 			func(std::forward<decltype(i)>(i));
 		return;

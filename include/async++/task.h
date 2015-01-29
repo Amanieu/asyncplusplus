@@ -200,11 +200,8 @@ class basic_event {
 		return true;
 	}
 
-	// Movable but not copyable
-	basic_event(const basic_event&);
-	basic_event& operator=(const basic_event&);
-
 public:
+	// Movable but not copyable
 	basic_event(basic_event&& other) LIBASYNC_NOEXCEPT
 		: internal_task(std::move(other.internal_task))
 	{
@@ -272,11 +269,8 @@ public:
 
 template<typename Result>
 class task: public detail::basic_task<Result> {
-	// Movable but not copyable
-	task(const task&);
-	task& operator=(const task&);
-
 public:
+	// Movable but not copyable
 	task() {}
 	task(task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_task<Result>(std::move(other)) {}
@@ -362,11 +356,8 @@ public:
 // Special task type which can be triggered manually rather than when a function executes.
 template<typename Result>
 class event_task: public detail::basic_event<Result> {
-	// Movable but not copyable
-	event_task(const event_task&);
-	event_task& operator=(const event_task& other);
-
 public:
+	// Movable but not copyable
 	event_task() {}
 	event_task(event_task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_event<Result>(std::move(other)) {}
@@ -390,11 +381,8 @@ public:
 // Specialization for references
 template<typename Result>
 class event_task<Result&>: public detail::basic_event<Result&> {
-	// Movable but not copyable
-	event_task(const event_task&);
-	event_task& operator=(const event_task& other);
-
 public:
+	// Movable but not copyable
 	event_task() {}
 	event_task(event_task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_event<Result&>(std::move(other)) {}
@@ -414,11 +402,8 @@ public:
 // Specialization for void
 template<>
 class event_task<void>: public detail::basic_event<void> {
-	// Movable but not copyable
-	event_task(const event_task&);
-	event_task& operator=(const event_task& other);
-
 public:
+	// Movable but not copyable
 	event_task() {}
 	event_task(event_task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_event<void>(std::move(other)) {}

@@ -145,14 +145,14 @@ void aligned_free(void* addr)
 // Register a thread on the waiter list
 static void register_waiter(auto_reset_event& thread_event)
 {
-	std::lock_guard<spinlock> lock(waiters_lock);
+	std::lock_guard<spinlock> locked(waiters_lock);
 	waiters.push_back(&thread_event);
 }
 
 // Remove a thread from the waiter list
 static void remove_waiter(auto_reset_event& thread_event)
 {
-	std::lock_guard<spinlock> lock(waiters_lock);
+	std::lock_guard<spinlock> locked(waiters_lock);
 	waiters.erase(std::remove(waiters.begin(), waiters.end(), &thread_event), waiters.end());
 }
 
@@ -401,7 +401,7 @@ public:
 
 		// Wake up any sleeping threads
 		{
-			std::lock_guard<spinlock> lock(waiters_lock);
+			std::lock_guard<spinlock> locked(waiters_lock);
 			for (auto_reset_event* i: waiters)
 				i->signal();
 			waiters.clear();
@@ -449,7 +449,7 @@ public:
 		// Get a thread to wake up from the list
 		auto_reset_event* wakeup;
 		{
-			std::lock_guard<spinlock> lock(waiters_lock);
+			std::lock_guard<spinlock> locked(waiters_lock);
 
 			// Check again if there are waiters
 			if (waiters.empty())

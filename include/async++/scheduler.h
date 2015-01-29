@@ -82,11 +82,8 @@ class task_run_handle {
 	explicit task_run_handle(detail::task_ptr t)
 		: handle(std::move(t)) {}
 
-	// Movable but not copyable
-	task_run_handle(const task_run_handle&);
-	task_run_handle& operator=(const task_run_handle&);
-
 public:
+	// Movable but not copyable
 	task_run_handle() {}
 	task_run_handle(task_run_handle&& other) LIBASYNC_NOEXCEPT
 		: handle(std::move(other.handle)) {}

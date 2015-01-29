@@ -43,7 +43,7 @@ Result parallel_map_reduce(scheduler& sched, Range&& range, const Result& init, 
 	// Split the partition, run inline if no more splits are possible
 	auto partitioner = async::to_partitioner(std::forward<Range>(range));
 	auto subpart = partitioner.split();
-	if (std::begin(subpart) == std::end(subpart)) {
+	if (subpart.begin() == subpart.end()) {
 		Result out = init;
 		for (auto&& i: partitioner)
 			out = reduce(std::move(out), map(std::forward<decltype(i)>(i)));
