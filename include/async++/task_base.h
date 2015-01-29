@@ -48,100 +48,137 @@ enum class dispatch_op {
 	destroy
 };
 
-// Continuation vector optimized for single continuations. Only supports a
-// minimal set of operations.
+// Thread-safe vector of task_ptr which is optimized for the common case of
+// only having a single continuation.
 class continuation_vector {
-	std::size_t count;
+	// Heap-allocated data for the slow path
+	struct vector_data {
+		std::vector<task_base*> vector;
+		std::mutex lock;
+	};
 
-	struct data_union {
-		data_union()
-		{
-			new(&inline_data()) task_ptr;
-		}
+	// Internal data of the vector
+	struct internal_data {
+		// If this is true then no more changes are allowed
+		bool is_locked;
 
-		// Destruction is handled by the parent class
-		~data_union() {}
+		// Indicates which element of the union is currently active
+		bool is_vector;
 
-		std::aligned_storage<sizeof(task_ptr), std::alignment_of<task_ptr>::value>::type data;
+		union {
+			// Fast path: This represents zero (nullptr) or one elements
+			task_base* inline_ptr;
 
-		// Inline continuation used for common case (only one continuation)
-		task_ptr& inline_data()
-		{
-			return *reinterpret_cast<task_ptr*>(&data);
-		}
+			// Slow path: This is used for two or more elements
+			vector_data* vector_ptr;
+		};
+	};
 
-		// Vector of continuations. The capacity is the lowest power of 2
-		// which is >= count.
-		std::unique_ptr<task_ptr[]>& vector_data()
-		{
-			return *reinterpret_cast<std::unique_ptr<task_ptr[]>*>(&data);
-		}
-	} data;
+	// All changes to the internal data are atomic
+	std::atomic<internal_data> atomic_data;
 
 public:
+	// Start unlocked with zero elements in the fast path
 	continuation_vector()
-		: count(0) {}
+		: atomic_data(internal_data{false, false, {}}) {}
 
-	task_ptr* begin()
-	{
-		if (count > 1)
-			return data.vector_data().get();
-		else
-			return &data.inline_data();
-	}
-	task_ptr* end()
-	{
-		return begin() + count;
-	}
-
-	void push_back(task_ptr t)
-	{
-		// First try to insert the continuation inline
-		if (count == 0) {
-			data.inline_data() = std::move(t);
-			count = 1;
-		}
-
-		// Check if we need to go from an inline continuation to a vector
-		else if (count == 1) {
-			std::unique_ptr<task_ptr[]> ptr(new task_ptr[2]);
-			ptr[0] = std::move(data.inline_data());
-			ptr[1] = std::move(t);
-			data.inline_data().~task_ptr();
-			new(&data.vector_data()) std::unique_ptr<task_ptr[]>(std::move(ptr));
-			count = 2;
-		}
-
-		// Check if the vector needs to be grown (size is a power of 2)
-		else if ((count & (count - 1)) == 0) {
-			std::unique_ptr<task_ptr[]> ptr(new task_ptr[count * 2]);
-			std::move(data.vector_data().get(), data.vector_data().get() + count, ptr.get());
-			ptr[count++] = std::move(t);
-			data.vector_data() = std::move(ptr);
-		}
-	}
-
-	void clear()
-	{
-		if (count > 1) {
-			data.vector_data().~unique_ptr();
-			new(&data.inline_data()) task_ptr;
-		} else
-			data.inline_data() = nullptr;
-		count = 0;
-	}
-
-	std::size_t size() const
-	{
-		return count;
-	}
-
+	// Free any left over data
 	~continuation_vector()
 	{
-		if (count > 1)
-			data.vector_data().~unique_ptr();
-		else
-			data.inline_data().~task_ptr();
+		// Using task_ptr{} instead of remove_ref because task_base isn't
+		// defined yet at this point.
+		internal_data data = atomic_data.load(std::memory_order_relaxed);
+		if (!data.is_vector) {
+			// If the data is locked then the inline pointer is already gone
+			if (!data.is_locked)
+				task_ptr{data.inline_ptr};
+		} else {
+			for (auto i: data.vector_ptr->vector)
+				task_ptr{i};
+			delete data.vector_ptr;
+		}
+	}
+
+	// Try adding an element to the vector. This fails and returns false if
+	// the vector has been locked. In that case t is not modified.
+	bool try_add(task_ptr&& t)
+	{
+		// Cache to avoid re-allocating vector_data multiple times. This is
+		// automatically freed if it is not successfully saved to atomic_data.
+		std::unique_ptr<vector_data> vector;
+
+		// Compare-exchange loop on atomic_data
+		internal_data data = atomic_data.load(std::memory_order_relaxed);
+		internal_data new_data;
+		new_data.is_locked = false;
+		do {
+			// Return immediately if the vector is locked
+			if (data.is_locked)
+				return false;
+
+			if (!data.is_vector) {
+				if (!data.inline_ptr) {
+					// Going from 0 to 1 elements
+					new_data.inline_ptr = t.get();
+					new_data.is_vector = false;
+				} else {
+					// Going from 1 to 2 elements, allocate a vector_data
+					if (!vector)
+						vector.reset(new vector_data{{data.inline_ptr, t.get()}, {}});
+					new_data.vector_ptr = vector.get();
+					new_data.is_vector = true;
+				}
+			} else {
+				// Larger vectors use a mutex, so grab the lock
+				std::atomic_thread_fence(std::memory_order_acquire);
+				std::lock_guard<std::mutex> locked(data.vector_ptr->lock);
+
+				// We need to check again if the vector has been locked here
+				// to avoid a race condition with flush_and_lock
+				if (atomic_data.load(std::memory_order_relaxed).is_locked)
+					return false;
+
+				// Add the element to the vector and return
+				data.vector_ptr->vector.push_back(t.release());
+				return true;
+			}
+		} while (!atomic_data.compare_exchange_weak(data, new_data, std::memory_order_release, std::memory_order_relaxed));
+
+		// If we reach this point then atomic_data was successfully changed.
+		// Since the pointers are now saved in the vector, release them from
+		// the smart pointers.
+		t.release();
+		vector.release();
+		return true;
+	}
+
+	// Lock the vector and flush all elements through the given function
+	template<typename Func> void flush_and_lock(Func&& func)
+	{
+		// Try to lock the vector using a compare-exchange loop
+		internal_data data = atomic_data.load(std::memory_order_relaxed);
+		internal_data new_data;
+		do {
+			new_data = data;
+			new_data.is_locked = true;
+		} while (!atomic_data.compare_exchange_weak(data, new_data, std::memory_order_acquire, std::memory_order_relaxed));
+
+		if (!data.is_vector) {
+			// If there is an inline element, just pass it on
+			if (data.inline_ptr)
+				func(task_ptr(data.inline_ptr));
+		} else {
+			// If we are using vector_data, lock it and flush all elements
+			std::lock_guard<std::mutex> locked(data.vector_ptr->lock);
+			for (auto i: data.vector_ptr->vector)
+				func(task_ptr(i));
+
+			// Clear the vector to save memory. Note that we don't actually free
+			// the vector_data here because other threads may still be using it.
+			// This isn't a very significant cost since multiple continuations
+			// are relatively rare.
+			data.vector_ptr->vector.clear();
+		}
 	}
 };
 
@@ -153,8 +190,7 @@ struct task_base: public ref_count_base<task_base> {
 	// Whether this task should be run even if the parent was canceled
 	bool always_cont;
 
-	// Vector of continuations and lock protecting it
-	spinlock lock;
+	// Vector of continuations
 	continuation_vector continuations;
 
 	// Scheduler to be used to schedule this task
@@ -209,19 +245,9 @@ struct task_base: public ref_count_base<task_base> {
 	// The list of continuations is then emptied.
 	void run_continuations(bool cancel)
 	{
-		// Wait for any threads which may be adding a continuation. The lock is
-		// not needed afterwards because any future continuations are run
-		// directly instead of being added to the continuation list.
-		while (lock.get_atomic().load(std::memory_order_acquire))
-			spinlock::spin_pause();
-
-		// Early exit for common case of zero continuations
-		if (continuations.size() == 0)
-			return;
-
-		for (auto& i: continuations)
-			run_continuation(std::move(i), cancel);
-		continuations.clear();
+		continuations.flush_and_lock([this, cancel](task_ptr t) {
+			run_continuation(std::move(t), cancel);
+		});
 	}
 
 	// Add a continuation to this task
@@ -230,14 +256,10 @@ struct task_base: public ref_count_base<task_base> {
 		// Check for task completion
 		task_state current_state = state.load(std::memory_order_relaxed);
 		if (!is_finished(current_state)) {
-			std::lock_guard<spinlock> locked(lock);
-
-			// If the task has not finished yet, add the continuation to it
-			current_state = state.load(std::memory_order_relaxed);
-			if (!is_finished(current_state)) {
-				continuations.push_back(cont);
+			// Try to add the task to the continuation list. This can fail only
+			// if the task has just finished, in which case we run it directly.
+			if (continuations.try_add(std::move(cont)))
 				return;
-			}
 		}
 
 		// Otherwise run the continuation directly
