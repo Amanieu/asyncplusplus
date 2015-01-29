@@ -43,10 +43,7 @@ struct is_partitioner: public std::integral_constant<bool, sizeof(is_partitioner
 inline std::size_t auto_grain_size(std::size_t dist)
 {
 	// Determine the grain size automatically using a heuristic
-	std::size_t num_threads = std::thread::hardware_concurrency();
-	if (num_threads == 0)
-		num_threads = 1;
-	std::size_t grain = dist / (8 * num_threads);
+	std::size_t grain = dist / (8 * hardware_concurrency());
 	if (grain < 1)
 		grain = 1;
 	if (grain > 2048)
@@ -116,7 +113,7 @@ public:
 		// Check if we are in a different thread than we were before
 		std::thread::id current_thread = std::this_thread::get_id();
 		if (current_thread != last_thread)
-			num_threads = std::thread::hardware_concurrency();
+			num_threads = hardware_concurrency();
 
 		// If we only have one thread, don't split
 		if (num_threads <= 1)

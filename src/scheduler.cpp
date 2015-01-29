@@ -371,9 +371,9 @@ public:
 		if (s)
 			num_threads = std::strtoul(s, nullptr, 10);
 		else
-			num_threads = std::thread::hardware_concurrency();
+			num_threads = hardware_concurrency();
 
-		// Make sure thread count isn't something ridiculous
+		// Make sure the thread count is reasonable
 		if (num_threads < 1)
 			num_threads = 1;
 
@@ -560,6 +560,15 @@ template<typename T> singleton<T> singleton<T>::instance;
 #endif
 
 } // namespace detail
+
+std::size_t hardware_concurrency()
+{
+	// Cache the value because calculating it may be expensive
+	static std::size_t value = std::thread::hardware_concurrency();
+
+	// Always return at least 1 core
+	return value == 0 ? 1 : value;
+}
 
 wait_handler set_thread_wait_handler(wait_handler handler)
 {

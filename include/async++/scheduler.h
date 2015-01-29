@@ -24,6 +24,11 @@
 
 namespace async {
 
+// Improved version of std::hardware_concurrency:
+// - It never returns 0, 1 is returned instead.
+// - It is guaranteed to remain constant for the duration of the program.
+LIBASYNC_EXPORT std::size_t hardware_concurrency();
+
 // Task handle used by a wait handler
 class task_wait_handle {
 	detail::task_base* handle;
