@@ -37,8 +37,8 @@ struct default_map {
 } // namespace detail
 
 // Run a function for each element in a range and then reduce the results of that function to a single value
-template<typename Range, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_map_reduce(scheduler& sched, Range&& range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
+template<typename Sched, typename Range, typename Result, typename MapFunc, typename ReduceFunc>
+Result parallel_map_reduce(Sched& sched, Range&& range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
 {
 	// Split the partition, run inline if no more splits are possible
 	auto partitioner = async::to_partitioner(std::forward<Range>(range));
@@ -66,8 +66,8 @@ Result parallel_map_reduce(Range&& range, const Result& init, const MapFunc& map
 }
 
 // Overloads with std::initializer_list
-template<typename T, typename Result, typename MapFunc, typename ReduceFunc>
-Result parallel_map_reduce(scheduler& sched, std::initializer_list<T> range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
+template<typename Sched, typename T, typename Result, typename MapFunc, typename ReduceFunc>
+Result parallel_map_reduce(Sched& sched, std::initializer_list<T> range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
 {
 	return async::parallel_map_reduce(sched, async::make_range(range.begin(), range.end()), init, map, reduce);
 }
@@ -78,8 +78,8 @@ Result parallel_map_reduce(std::initializer_list<T> range, const Result& init, c
 }
 
 // Variant with identity map operation
-template<typename Range, typename Result, typename ReduceFunc>
-Result parallel_reduce(scheduler& sched, Range&& range, const Result& init, const ReduceFunc& reduce)
+template<typename Sched, typename Range, typename Result, typename ReduceFunc>
+Result parallel_reduce(Sched& sched, Range&& range, const Result& init, const ReduceFunc& reduce)
 {
 	return async::parallel_map_reduce(sched, range, init, detail::default_map(), reduce);
 }
@@ -88,8 +88,8 @@ Result parallel_reduce(Range&& range, const Result& init, const ReduceFunc& redu
 {
 	return async::parallel_reduce(LIBASYNC_DEFAULT_SCHEDULER, range, init, reduce);
 }
-template<typename T, typename Result, typename ReduceFunc>
-Result parallel_reduce(scheduler& sched, std::initializer_list<T> range, const Result& init, const ReduceFunc& reduce)
+template<typename Sched, typename T, typename Result, typename ReduceFunc>
+Result parallel_reduce(Sched& sched, std::initializer_list<T> range, const Result& init, const ReduceFunc& reduce)
 {
 	return async::parallel_reduce(sched, async::make_range(range.begin(), range.end()), init, reduce);
 }

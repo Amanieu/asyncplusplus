@@ -25,8 +25,8 @@
 namespace async {
 
 // Run a function for each element in a range
-template<typename Range, typename Func>
-void parallel_for(scheduler& sched, Range&& range, const Func& func)
+template<typename Sched, typename Range, typename Func>
+void parallel_for(Sched& sched, Range&& range, const Func& func)
 {
 	// Split the partition, run inline if no more splits are possible
 	auto partitioner = async::to_partitioner(std::forward<Range>(range));
@@ -53,8 +53,8 @@ void parallel_for(Range&& range, const Func& func)
 }
 
 // Overloads with std::initializer_list
-template<typename T, typename Func>
-void parallel_for(scheduler& sched, std::initializer_list<T> range, const Func& func)
+template<typename Sched, typename T, typename Func>
+void parallel_for(Sched& sched, std::initializer_list<T> range, const Func& func)
 {
 	async::parallel_for(sched, async::make_range(range.begin(), range.end()), func);
 }

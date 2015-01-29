@@ -24,48 +24,95 @@
 
 namespace async {
 
-// Scheduler interface
 class task_run_handle;
-class LIBASYNC_EXPORT scheduler {
-public:
-	// Schedule a task for execution.
-	virtual void schedule(task_run_handle t) = 0;
-};
 
-// Run a task in a thread pool. This scheduler will wait for all tasks to finish
-// at program exit.
-LIBASYNC_EXPORT scheduler& threadpool_scheduler();
-
-// Run a task directly
-LIBASYNC_EXPORT scheduler& inline_scheduler();
-
-// Run a task in a separate thread. Note that this scheduler does not wait for
-// threads to finish at process exit. You must ensure that all threads finish
-// before ending the process.
-LIBASYNC_EXPORT scheduler& thread_scheduler();
-
-// Wait handler function prototype
-class task_wait_handle;
-typedef void (*wait_handler)(task_wait_handle t);
-
-// Set a wait handler to control what a task does when it has "free time", which
-// is when it is waiting for another task to complete. The wait handler can do
-// other work, but should return when it detects that the task has completed.
-// The previously installed handler is returned.
-LIBASYNC_EXPORT wait_handler set_thread_wait_handler(wait_handler w);
+// Scheduler interface:
+// A scheduler is any type that implements this function:
+// void schedule(async::task_run_handle t);
+// This function should result in t.run() being called at some future point.
 
 namespace detail {
+
+// Detect whether an object is a scheduler
+template<typename T, typename = decltype(std::declval<T>().schedule(std::declval<task_run_handle>()))>
+two& is_scheduler_helper(int);
+template<typename T>
+one& is_scheduler_helper(...);
+template<typename T>
+struct is_scheduler: public std::integral_constant<bool, sizeof(is_scheduler_helper<T>(0)) - 1> {};
+
+// Type-erased reference to a scheduler, which is itself a scheduler
+class scheduler_ref {
+	// Type-erased data
+	void* sched_ptr;
+	void (*sched_func)(void* sched, task_run_handle&& t);
+	template<typename T>
+	static void invoke_sched(void* sched, task_run_handle&& t)
+	{
+		static_cast<T*>(sched)->schedule(std::move(t));
+	}
+
+public:
+	// Wrap the given scheduler type
+	scheduler_ref() {}
+	template<typename T> explicit scheduler_ref(T& sched)
+		: sched_ptr(std::addressof(sched)), sched_func(invoke_sched<T>) {}
+
+	// Forward tasks to the wrapped scheduler
+	void schedule(task_run_handle&& t)
+	{
+		sched_func(sched_ptr, std::move(t));
+	}
+};
+
+// Singleton scheduler classes
+class thread_scheduler_impl {
+public:
+	LIBASYNC_EXPORT static void schedule(task_run_handle t);
+};
+class inline_scheduler_impl {
+public:
+	static void schedule(task_run_handle t);
+};
+class default_scheduler_impl {
+public:
+	default_scheduler_impl();
+	~default_scheduler_impl();
+	LIBASYNC_EXPORT static void schedule(task_run_handle t);
+};
 
 // Reference counted pointer to task data
 struct task_base;
 typedef ref_count_ptr<task_base> task_ptr;
 
 // Helper function to schedule a task using a scheduler
-void schedule_task(scheduler& sched, task_ptr t);
+template<typename Sched>
+void schedule_task(Sched& sched, task_ptr t);
 
 // Wait for the given task to finish. This will call the wait handler currently
 // active for this thread, which causes the thread to sleep by default.
 LIBASYNC_EXPORT void wait_for_task(task_base* wait_task);
 
 } // namespace detail
+
+// Run a task in the current thread as soon as it is scheduled
+inline detail::inline_scheduler_impl& inline_scheduler()
+{
+	static detail::inline_scheduler_impl instance;
+	return instance;
+}
+
+// Run a task in a separate thread. Note that this scheduler does not wait for
+// threads to finish at process exit. You must ensure that all threads finish
+// before ending the process.
+inline detail::thread_scheduler_impl& thread_scheduler()
+{
+	static detail::thread_scheduler_impl instance;
+	return instance;
+}
+
+// Run a task in a thread pool. This scheduler will wait for all tasks to finish
+// at program exit.
+LIBASYNC_EXPORT detail::default_scheduler_impl& default_scheduler();
+
 } // namespace async

@@ -63,8 +63,8 @@ class basic_task {
 	}
 
 	// Common code for then()
-	template<typename Func, typename Parent>
-	typename continuation_traits<Parent, Func>::task_type then_internal(scheduler& sched, Func&& f, Parent&& parent) const
+	template<typename Sched, typename Func, typename Parent>
+	typename continuation_traits<Parent, Func>::task_type then_internal(Sched& sched, Func&& f, Parent&& parent) const
 	{
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects
@@ -82,13 +82,13 @@ class basic_task {
 		set_internal_task(cont, task_ptr(new task_func<exec_func, cont_internal_result>(std::forward<Func>(f), std::forward<Parent>(parent))));
 
 		// Set continuation parameters
-		get_internal_task(cont)->sched = &sched;
+		get_internal_task(cont)->sched = scheduler_ref(sched);
 		get_internal_task(cont)->always_cont = !continuation_traits<Parent, Func>::is_value_cont::value;
 
 		// Add the continuation to this task
 		// Avoid an expensive ref-count modification since the task isn't shared yet
 		get_internal_task(cont)->add_ref_unlocked();
-		my_internal->add_continuation(task_ptr(get_internal_task(cont)));
+		my_internal->add_continuation(sched, task_ptr(get_internal_task(cont)));
 
 		return cont;
 	}
@@ -292,8 +292,8 @@ public:
 	}
 
 	// Add a continuation to the task
-	template<typename Func>
-	typename detail::continuation_traits<task, Func>::task_type then(scheduler& sched, Func&& f)
+	template<typename Sched, typename Func>
+	typename detail::continuation_traits<task, Func>::task_type then(Sched& sched, Func&& f)
 	{
 		return this->then_internal(sched, std::forward<Func>(f), std::move(*this));
 	}
@@ -341,8 +341,8 @@ public:
 	}
 
 	// Add a continuation to the task
-	template<typename Func>
-	typename detail::continuation_traits<shared_task, Func>::task_type then(scheduler& sched, Func&& f) const
+	template<typename Sched, typename Func>
+	typename detail::continuation_traits<shared_task, Func>::task_type then(Sched& sched, Func&& f) const
 	{
 		return this->then_internal(sched, std::forward<Func>(f), *this);
 	}
@@ -438,13 +438,14 @@ class LIBASYNC_CACHELINE_ALIGN local_task {
 	detail::task_func<exec_func, internal_result> internal_task;
 
 	// Friend access for local_spawn
-	template<typename F>
-	friend local_task<F> local_spawn(scheduler& sched, F&& f);
+	template<typename S, typename F>
+	friend local_task<F> local_spawn(S& sched, F&& f);
 	template<typename F>
 	friend local_task<F> local_spawn(F&& f);
 
 	// Constructor, used by local_spawn
-	local_task(scheduler& sched, Func&& f)
+	template<typename Sched>
+	local_task(Sched& sched, Func&& f)
 		: internal_task(std::forward<Func>(f))
 	{
 		// Avoid an expensive ref-count modification since the task isn't shared yet
@@ -454,9 +455,7 @@ class LIBASYNC_CACHELINE_ALIGN local_task {
 
 	// Non-movable and non-copyable
 	local_task(const local_task&);
-	local_task(local_task&&);
 	local_task& operator=(const local_task&);
-	local_task& operator=(local_task&&);
 
 public:
 	// Wait for the task to complete when destroying
@@ -467,7 +466,7 @@ public:
 		// Now spin until the reference count drops to 1, since the scheduler
 		// may still have a reference to the task.
 		while (!internal_task.is_unique_ref())
-			detail::spinlock::spin_pause();
+			std::this_thread::yield();
 	}
 
 	// Query whether the task has finished executing
@@ -500,8 +499,8 @@ public:
 };
 
 // Spawn a function asynchronously
-template<typename Func>
-task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn(scheduler& sched, Func&& f)
+template<typename Sched, typename Func>
+task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn(Sched& sched, Func&& f)
 {
 	// Make sure the function type is callable
 	static_assert(detail::is_callable<Func()>::value, "Invalid function type passed to spawn()");
@@ -550,11 +549,11 @@ inline task<void> make_task()
 // joins on destruction. Because local_task is not movable, the result must
 // be captured in a reference, like this:
 // auto&& x = local_spawn(...);
-template<typename Func>
+template<typename Sched, typename Func>
 #ifdef __GNUC__
 __attribute__((warn_unused_result))
 #endif
-local_task<Func> local_spawn(scheduler& sched, Func&& f)
+local_task<Func> local_spawn(Sched& sched, Func&& f)
 {
 	// Since local_task is not movable, we construct it in-place and let the
 	// caller extend the lifetime of the returned object using a reference.

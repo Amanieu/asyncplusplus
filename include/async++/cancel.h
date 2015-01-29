@@ -33,9 +33,7 @@ class cancellation_token {
 
 	// Non-copyable and non-movable
 	cancellation_token(const cancellation_token&);
-	cancellation_token(cancellation_token&&);
 	cancellation_token& operator=(const cancellation_token&);
-	cancellation_token& operator=(cancellation_token&&);
 
 public:
 	cancellation_token()

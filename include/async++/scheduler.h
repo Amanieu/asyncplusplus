@@ -67,18 +67,28 @@ public:
 		static_assert(detail::is_callable<Func()>::value, "Invalid function type passed to on_finish()");
 
 		detail::task_ptr cont(new detail::task_func<wait_exec_func<typename std::decay<Func>::type>, detail::fake_void>(std::forward<Func>(func)));
-		cont->sched = &inline_scheduler();
+		cont->sched = detail::scheduler_ref(inline_scheduler());
 		cont->always_cont = true;
-		handle->add_continuation(std::move(cont));
+		handle->add_continuation(inline_scheduler(), std::move(cont));
 	}
 };
+
+// Wait handler function prototype
+typedef void (*wait_handler)(task_wait_handle t);
+
+// Set a wait handler to control what a task does when it has "free time", which
+// is when it is waiting for another task to complete. The wait handler can do
+// other work, but should return when it detects that the task has completed.
+// The previously installed handler is returned.
+LIBASYNC_EXPORT wait_handler set_thread_wait_handler(wait_handler w);
 
 // Task handle used in scheduler, acts as a unique_ptr to a task object
 class task_run_handle {
 	detail::task_ptr handle;
 
 	// Allow construction in schedule_task()
-	friend void detail::schedule_task(scheduler& sched, detail::task_ptr t);
+	template<typename Sched>
+	friend void detail::schedule_task(Sched& sched, detail::task_ptr t);
 	explicit task_run_handle(detail::task_ptr t)
 		: handle(std::move(t)) {}
 
@@ -130,9 +140,16 @@ public:
 namespace detail {
 
 // Schedule a task for execution using its scheduler
-inline void schedule_task(scheduler& sched, task_ptr t)
+template<typename Sched>
+void schedule_task(Sched& sched, task_ptr t)
 {
 	sched.schedule(task_run_handle(std::move(t)));
+}
+
+// Inline scheduler implementation
+inline void inline_scheduler_impl::schedule(task_run_handle t)
+{
+	t.run();
 }
 
 } // namespace detail

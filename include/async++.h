@@ -33,11 +33,6 @@
 #include <utility>
 #include <vector>
 
-// SSE intrinsics for _mm_pause
-#if defined(__SSE__) || _M_IX86_FP > 0
-#include <xmmintrin.h>
-#endif
-
 // Export declaration to make symbols visible for dll/so
 #ifdef LIBASYNC_STATIC
 # define LIBASYNC_EXPORT
@@ -97,7 +92,7 @@
 // Set this to override the default scheduler for newly created tasks.
 // async::threadpool_scheduler() is used by default.
 #ifndef LIBASYNC_DEFAULT_SCHEDULER
-# define LIBASYNC_DEFAULT_SCHEDULER async::threadpool_scheduler()
+# define LIBASYNC_DEFAULT_SCHEDULER async::default_scheduler()
 #endif
 
 // Force symbol visibility to hidden unless explicity exported
@@ -118,7 +113,6 @@ class event_task;
 } // namespace async
 
 // Include sub-headers
-#include "async++/spinlock.h"
 #include "async++/traits.h"
 #include "async++/aligned_alloc.h"
 #include "async++/ref_count.h"

@@ -194,7 +194,7 @@ struct task_base: public ref_count_base<task_base> {
 	continuation_vector continuations;
 
 	// Scheduler to be used to schedule this task
-	scheduler* sched;
+	scheduler_ref sched;
 
 	// Exception associated with the task if it was canceled
 	std::exception_ptr except;
@@ -226,13 +226,13 @@ struct task_base: public ref_count_base<task_base> {
 	}
 
 	// Run a single continuation
-	void run_continuation(task_ptr&& cont, bool cancel)
+	template<typename Sched>
+	void run_continuation(Sched& sched, task_ptr&& cont, bool cancel)
 	{
 		// Handle continuations that run even if the parent task is canceled
 		if (!cancel || cont->always_cont) {
-			scheduler& s = *cont->sched;
 			LIBASYNC_TRY {
-				schedule_task(s, std::move(cont));
+				detail::schedule_task(sched, std::move(cont));
 			} LIBASYNC_CATCH(...) {
 				// This is suboptimal, but better than letting the exception leak
 				cont->cancel(std::current_exception());
@@ -246,12 +246,14 @@ struct task_base: public ref_count_base<task_base> {
 	void run_continuations(bool cancel)
 	{
 		continuations.flush_and_lock([this, cancel](task_ptr t) {
-			run_continuation(std::move(t), cancel);
+			scheduler_ref sched = t->sched;
+			run_continuation(sched, std::move(t), cancel);
 		});
 	}
 
 	// Add a continuation to this task
-	void add_continuation(task_ptr cont)
+	template<typename Sched>
+	void add_continuation(Sched& sched, task_ptr cont)
 	{
 		// Check for task completion
 		task_state current_state = state.load(std::memory_order_relaxed);
@@ -264,7 +266,7 @@ struct task_base: public ref_count_base<task_base> {
 
 		// Otherwise run the continuation directly
 		std::atomic_thread_fence(std::memory_order_acquire);
-		run_continuation(std::move(cont), current_state == task_state::canceled);
+		run_continuation(sched, std::move(cont), current_state == task_state::canceled);
 	}
 
 	// Cancel the task with an exception

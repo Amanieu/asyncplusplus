@@ -103,7 +103,7 @@ struct LIBASYNC_CACHELINE_ALIGN thread_data_t {
 static aligned_array<thread_data_t> thread_data;
 
 // Global queue for tasks from outside the pool
-static spinlock public_queue_lock;
+static std::mutex public_queue_lock;
 static std::unique_ptr<fifo_queue> public_queue;
 
 // Shutdown request indicator
@@ -114,7 +114,7 @@ static std::atomic<std::size_t> shutdown_num_threads;
 static auto_reset_event shutdown_complete_event;
 
 // List of threads waiting for tasks to run
-static spinlock waiters_lock;
+static std::mutex waiters_lock;
 static std::vector<auto_reset_event*> waiters;
 
 void* aligned_alloc(std::size_t size, std::size_t align)
@@ -145,21 +145,21 @@ void aligned_free(void* addr)
 // Register a thread on the waiter list
 static void register_waiter(auto_reset_event& thread_event)
 {
-	std::lock_guard<spinlock> locked(waiters_lock);
+	std::lock_guard<std::mutex> locked(waiters_lock);
 	waiters.push_back(&thread_event);
 }
 
 // Remove a thread from the waiter list
 static void remove_waiter(auto_reset_event& thread_event)
 {
-	std::lock_guard<spinlock> locked(waiters_lock);
+	std::lock_guard<std::mutex> locked(waiters_lock);
 	waiters.erase(std::remove(waiters.begin(), waiters.end(), &thread_event), waiters.end());
 }
 
 // Try to pop a task from the public queue
 static task_run_handle pop_public_queue()
 {
-	std::lock_guard<spinlock> locked(public_queue_lock);
+	std::lock_guard<std::mutex> locked(public_queue_lock);
 	return public_queue->pop();
 }
 
@@ -358,132 +358,118 @@ static void recursive_spawn_worker_thread(std::size_t index, std::size_t threads
 	}
 }
 
-// Thread pool scheduler implementation
-class threadpool_scheduler_impl: public scheduler {
-public:
-	// Initialize thread pool on first use
-	threadpool_scheduler_impl()
+// Initialize thread pool on first use
+default_scheduler_impl::default_scheduler_impl()
+{
+	// Get the requested number of threads from the environment
+	// If that fails, use the number of CPUs in the system
+	const char *s = std::getenv("LIBASYNC_NUM_THREADS");
+	std::size_t num_threads;
+	if (s)
+		num_threads = std::strtoul(s, nullptr, 10);
+	else
+		num_threads = hardware_concurrency();
+
+	// Make sure the thread count is reasonable
+	if (num_threads < 1)
+		num_threads = 1;
+
+	// Initialize shutdown_num_threads
+	shutdown_num_threads.store(num_threads, std::memory_order_relaxed);
+
+	// Reserve space in the waiters list to avoid resizes while running
+	waiters.reserve(num_threads);
+
+	// Allocate public queue
+	public_queue.reset(new fifo_queue);
+
+	// Allocate per-thread data
+	thread_data = aligned_array<thread_data_t>(num_threads);
+
+	// Start worker threads
+	std::thread(recursive_spawn_worker_thread, 0, num_threads).detach();
+}
+
+// Wait for all currently running tasks to finish
+default_scheduler_impl::~default_scheduler_impl()
+{
+	// Signal shutdown
+	shutdown = true;
+
+	// Wake up any sleeping threads
 	{
-		// Get the requested number of threads from the environment
-		// If that fails, use the number of CPUs in the system
-		const char *s = std::getenv("LIBASYNC_NUM_THREADS");
-		std::size_t num_threads;
-		if (s)
-			num_threads = std::strtoul(s, nullptr, 10);
-		else
-			num_threads = hardware_concurrency();
-
-		// Make sure the thread count is reasonable
-		if (num_threads < 1)
-			num_threads = 1;
-
-		// Initialize shutdown_num_threads
-		shutdown_num_threads.store(num_threads, std::memory_order_relaxed);
-
-		// Reserve space in the waiters list to avoid resizes while running
-		waiters.reserve(num_threads);
-
-		// Allocate public queue
-		public_queue.reset(new fifo_queue);
-
-		// Allocate per-thread data
-		thread_data = aligned_array<thread_data_t>(num_threads);
-
-		// Start worker threads
-		std::thread(recursive_spawn_worker_thread, 0, num_threads).detach();
-	}
-
-	// Wait for all currently running tasks to finish
-	~threadpool_scheduler_impl()
-	{
-		// Signal shutdown
-		shutdown = true;
-
-		// Wake up any sleeping threads
-		{
-			std::lock_guard<spinlock> locked(waiters_lock);
-			for (auto_reset_event* i: waiters)
-				i->signal();
-			waiters.clear();
-		}
-
-		// Wait for the threads to finish
-		shutdown_complete_event.wait();
-
-		// Flush the public queue
-		while (task_run_handle t = pop_public_queue())
-			t.run();
-
-		// Release resources
-		public_queue = nullptr;
-		thread_data = nullptr;
+		std::lock_guard<std::mutex> locked(waiters_lock);
+		for (auto_reset_event* i: waiters)
+			i->signal();
 		waiters.clear();
 	}
 
-	// Schedule a task on the thread pool
-	virtual void schedule(task_run_handle t) override final
-	{
-		// Check if we are in the thread pool
-		if (thread_in_pool) {
-			// Push task onto our task queue
-			thread_data[thread_id].queue.push(std::move(t));
-		} else {
-			std::lock_guard<spinlock> locked(public_queue_lock);
+	// Wait for the threads to finish
+	shutdown_complete_event.wait();
 
-			// If we have already shut down, just run the task inline
-			if (shutdown) {
-				t.run();
-				return;
-			}
+	// Flush the public queue
+	while (task_run_handle t = pop_public_queue())
+		t.run();
 
-			// Push task onto the public queue
-			public_queue->push(std::move(t));
+	// Release resources
+	public_queue = nullptr;
+	thread_data = nullptr;
+	waiters.clear();
+}
+
+// Schedule a task on the thread pool
+void default_scheduler_impl::schedule(task_run_handle t)
+{
+	// Check if we are in the thread pool
+	if (thread_in_pool) {
+		// Push task onto our task queue
+		thread_data[thread_id].queue.push(std::move(t));
+	} else {
+		std::lock_guard<std::mutex> locked(public_queue_lock);
+
+		// If we have already shut down, just run the task inline
+		if (shutdown) {
+			t.run();
+			return;
 		}
 
-		// If there are no sleeping threads, return.
-		// Technically this isn't thread safe, but we don't care because we
-		// check again inside the lock.
+		// Push task onto the public queue
+		public_queue->push(std::move(t));
+	}
+
+	// If there are no sleeping threads, return.
+	// Technically this isn't thread safe, but we don't care because we
+	// check again inside the lock.
+	if (waiters.empty())
+		return;
+
+	// Get a thread to wake up from the list
+	auto_reset_event* wakeup;
+	{
+		std::lock_guard<std::mutex> locked(waiters_lock);
+
+		// Check again if there are waiters
 		if (waiters.empty())
 			return;
 
-		// Get a thread to wake up from the list
-		auto_reset_event* wakeup;
-		{
-			std::lock_guard<spinlock> locked(waiters_lock);
-
-			// Check again if there are waiters
-			if (waiters.empty())
-				return;
-
-			// Pop a thread from the list and wake it up
-			wakeup = waiters.back();
-			waiters.pop_back();
-		}
-
-		// Signal the thread
-		wakeup->signal();
+		// Pop a thread from the list and wake it up
+		wakeup = waiters.back();
+		waiters.pop_back();
 	}
-};
 
-// Inline scheduler implementation
-class inline_scheduler_impl: public scheduler {
-public:
-	virtual void schedule(task_run_handle t) override final
-	{
-		t.run();
-	}
-};
+	// Signal the thread
+	wakeup->signal();
+}
 
 // Thread scheduler implementation
-class thread_scheduler_impl: public scheduler {
-public:
-	virtual void schedule(task_run_handle t) override final
-	{
-		std::thread([](const std::shared_ptr<task_run_handle>& t) {
-			t->run();
-		}, std::make_shared<task_run_handle>(std::move(t))).detach();
-	}
-};
+void thread_scheduler_impl::schedule(task_run_handle t)
+{
+	// A shared_ptr is used here because not all implementations of
+	// std::thread support move-only objects.
+	std::thread([](const std::shared_ptr<task_run_handle>& t) {
+		t->run();
+	}, std::make_shared<task_run_handle>(std::move(t))).detach();
+}
 
 // Wait for a task to complete (for threads outside thread pool)
 static void generic_wait_handler(task_wait_handle wait_task)
@@ -577,19 +563,9 @@ wait_handler set_thread_wait_handler(wait_handler handler)
 	return old;
 }
 
-scheduler& threadpool_scheduler()
+detail::default_scheduler_impl& default_scheduler()
 {
-	return detail::singleton<detail::threadpool_scheduler_impl>::get_instance();
-}
-
-scheduler& inline_scheduler()
-{
-	return detail::singleton<detail::inline_scheduler_impl>::get_instance();
-}
-
-scheduler& thread_scheduler()
-{
-	return detail::singleton<detail::thread_scheduler_impl>::get_instance();
+	return detail::singleton<detail::default_scheduler_impl>::get_instance();
 }
 
 } // namespace async
