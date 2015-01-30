@@ -545,6 +545,11 @@ public:
 template<typename T> singleton<T> singleton<T>::instance;
 #endif
 
+detail::default_scheduler_impl& internal_default_scheduler()
+{
+	return detail::singleton<detail::default_scheduler_impl>::get_instance();
+}
+
 } // namespace detail
 
 std::size_t hardware_concurrency()
@@ -561,11 +566,6 @@ wait_handler set_thread_wait_handler(wait_handler handler)
 	wait_handler old = detail::thread_wait_handler;
 	detail::thread_wait_handler = handler;
 	return old;
-}
-
-detail::default_scheduler_impl& default_scheduler()
-{
-	return detail::singleton<detail::default_scheduler_impl>::get_instance();
 }
 
 } // namespace async

@@ -89,12 +89,6 @@
 # define LIBASYNC_CACHELINE_ALIGN alignas(LIBASYNC_CACHELINE_SIZE)
 #endif
 
-// Set this to override the default scheduler for newly created tasks.
-// async::threadpool_scheduler() is used by default.
-#ifndef LIBASYNC_DEFAULT_SCHEDULER
-# define LIBASYNC_DEFAULT_SCHEDULER async::default_scheduler()
-#endif
-
 // Force symbol visibility to hidden unless explicity exported
 #if defined(__GNUC__) && !defined(_WIN32)
 #pragma GCC visibility push(hidden)

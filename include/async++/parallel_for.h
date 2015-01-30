@@ -49,7 +49,7 @@ void parallel_for(Sched& sched, Range&& range, const Func& func)
 template<typename Range, typename Func>
 void parallel_for(Range&& range, const Func& func)
 {
-	async::parallel_for(LIBASYNC_DEFAULT_SCHEDULER, range, func);
+	async::parallel_for(::async::default_scheduler(), range, func);
 }
 
 // Overloads with std::initializer_list

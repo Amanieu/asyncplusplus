@@ -64,7 +64,7 @@ typename std::enable_if<detail::is_scheduler<Sched>::value>::type parallel_invok
 template<typename... Args>
 void parallel_invoke(Args&&... args)
 {
-	async::parallel_invoke(LIBASYNC_DEFAULT_SCHEDULER, std::forward<Args>(args)...);
+	async::parallel_invoke(::async::default_scheduler(), std::forward<Args>(args)...);
 }
 
 } // namespace async

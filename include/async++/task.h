@@ -300,7 +300,7 @@ public:
 	template<typename Func>
 	typename detail::continuation_traits<task, Func>::task_type then(Func&& f)
 	{
-		return then(LIBASYNC_DEFAULT_SCHEDULER, std::forward<Func>(f));
+		return then(::async::default_scheduler(), std::forward<Func>(f));
 	}
 
 	// Create a shared_task from this task
@@ -349,7 +349,7 @@ public:
 	template<typename Func>
 	typename detail::continuation_traits<shared_task, Func>::task_type then(Func&& f) const
 	{
-		return then(LIBASYNC_DEFAULT_SCHEDULER, std::forward<Func>(f));
+		return then(::async::default_scheduler(), std::forward<Func>(f));
 	}
 };
 
@@ -518,9 +518,9 @@ task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn
 	return out;
 }
 template<typename Func>
-decltype(async::spawn(LIBASYNC_DEFAULT_SCHEDULER, std::declval<Func>())) spawn(Func&& f)
+decltype(async::spawn(::async::default_scheduler(), std::declval<Func>())) spawn(Func&& f)
 {
-	return async::spawn(LIBASYNC_DEFAULT_SCHEDULER, std::forward<Func>(f));
+	return async::spawn(::async::default_scheduler(), std::forward<Func>(f));
 }
 
 // Create a completed task containing a value
@@ -565,7 +565,7 @@ __attribute__((warn_unused_result))
 #endif
 local_task<Func> local_spawn(Func&& f)
 {
-	return {LIBASYNC_DEFAULT_SCHEDULER, std::forward<Func>(f)};
+	return {::async::default_scheduler(), std::forward<Func>(f)};
 }
 
 } // namespace async

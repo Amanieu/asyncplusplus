@@ -62,7 +62,7 @@ Result parallel_map_reduce(Sched& sched, Range&& range, const Result& init, cons
 template<typename Range, typename Result, typename MapFunc, typename ReduceFunc>
 Result parallel_map_reduce(Range&& range, const Result& init, const MapFunc& map, const ReduceFunc& reduce)
 {
-	return async::parallel_map_reduce(LIBASYNC_DEFAULT_SCHEDULER, range, init, map, reduce);
+	return async::parallel_map_reduce(::async::default_scheduler(), range, init, map, reduce);
 }
 
 // Overloads with std::initializer_list
@@ -86,7 +86,7 @@ Result parallel_reduce(Sched& sched, Range&& range, const Result& init, const Re
 template<typename Range, typename Result, typename ReduceFunc>
 Result parallel_reduce(Range&& range, const Result& init, const ReduceFunc& reduce)
 {
-	return async::parallel_reduce(LIBASYNC_DEFAULT_SCHEDULER, range, init, reduce);
+	return async::parallel_reduce(::async::default_scheduler(), range, init, reduce);
 }
 template<typename Sched, typename T, typename Result, typename ReduceFunc>
 Result parallel_reduce(Sched& sched, std::initializer_list<T> range, const Result& init, const ReduceFunc& reduce)

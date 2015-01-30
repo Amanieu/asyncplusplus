@@ -81,6 +81,10 @@ public:
 	LIBASYNC_EXPORT static void schedule(task_run_handle t);
 };
 
+// Run a task in a thread pool. This scheduler will wait for all tasks to finish
+// at program exit.
+LIBASYNC_EXPORT default_scheduler_impl& internal_default_scheduler();
+
 // Reference counted pointer to task data
 struct task_base;
 typedef ref_count_ptr<task_base> task_ptr;
@@ -111,8 +115,14 @@ inline detail::thread_scheduler_impl& thread_scheduler()
 	return instance;
 }
 
-// Run a task in a thread pool. This scheduler will wait for all tasks to finish
-// at program exit.
-LIBASYNC_EXPORT detail::default_scheduler_impl& default_scheduler();
+// If LIBASYNC_CUSTOM_DEFAULT_SCHEDULER is defined then async::default_scheduler
+// is left undefined and should be defined by the user. Keep in mind that in
+// order to work, this function should be declared before including async++.h.
+#ifndef LIBASYNC_CUSTOM_DEFAULT_SCHEDULER
+inline detail::default_scheduler_impl& default_scheduler()
+{
+	return detail::internal_default_scheduler();
+}
+#endif
 
 } // namespace async
