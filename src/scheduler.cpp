@@ -82,6 +82,8 @@
 #endif
 
 #include "auto_reset_event.h"
+#include "fifo_queue.h"
+#include "work_steal_queue.h"
 
 namespace async {
 namespace detail {
@@ -551,6 +553,33 @@ detail::default_scheduler_impl& internal_default_scheduler()
 }
 
 } // namespace detail
+
+// FIFO scheduler implementation
+fifo_scheduler::fifo_scheduler()
+	: queue(new detail::fifo_queue) {}
+fifo_scheduler::~fifo_scheduler() {}
+void fifo_scheduler::schedule(task_run_handle t)
+{
+	std::lock_guard<std::mutex> locked(lock);
+	queue->push(std::move(t));
+}
+bool fifo_scheduler::try_run_one_task()
+{
+	task_run_handle t;
+	{
+		std::lock_guard<std::mutex> locked(lock);
+		t = queue->pop();
+	}
+	if (t) {
+		t.run();
+		return true;
+	}
+	return false;
+}
+void fifo_scheduler::run_all_tasks()
+{
+	while (try_run_one_task()) {}
+}
 
 std::size_t hardware_concurrency()
 {

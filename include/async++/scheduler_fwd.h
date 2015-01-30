@@ -97,6 +97,9 @@ void schedule_task(Sched& sched, task_ptr t);
 // active for this thread, which causes the thread to sleep by default.
 LIBASYNC_EXPORT void wait_for_task(task_base* wait_task);
 
+// Implementation details used in schedulers
+class fifo_queue;
+
 } // namespace detail
 
 // Run a task in the current thread as soon as it is scheduled
@@ -124,5 +127,25 @@ inline detail::default_scheduler_impl& default_scheduler()
 	return detail::internal_default_scheduler();
 }
 #endif
+
+// Scheduler that holds a list of tasks which can then be explicitly executed
+// by a thread. Both adding and running tasks are thread-safe operations.
+class fifo_scheduler {
+	std::unique_ptr<detail::fifo_queue> queue;
+	std::mutex lock;
+
+public:
+	LIBASYNC_EXPORT fifo_scheduler();
+	LIBASYNC_EXPORT ~fifo_scheduler();
+
+	// Add a task to the queue
+	LIBASYNC_EXPORT void schedule(task_run_handle t);
+
+	// Try running one task from the queue. Returns false if the queue was empty.
+	LIBASYNC_EXPORT bool try_run_one_task();
+
+	// Run all tasks in the queue
+	LIBASYNC_EXPORT void run_all_tasks();
+};
 
 } // namespace async

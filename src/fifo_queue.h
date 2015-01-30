@@ -23,6 +23,7 @@
 #endif
 
 namespace async {
+namespace detail {
 
 // Queue which holds tasks in FIFO order. Note that this queue is not
 // thread-safe and must be protected by a lock.
@@ -64,4 +65,5 @@ public:
 	}
 };
 
+} // namespace detail
 } // namespace async

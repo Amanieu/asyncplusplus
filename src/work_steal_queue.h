@@ -23,6 +23,7 @@
 #endif
 
 namespace async {
+namespace detail {
 
 // Chase-Lev work stealing deque
 //
@@ -176,4 +177,5 @@ public:
 	}
 };
 
+} // namespace detail
 } // namespace async
