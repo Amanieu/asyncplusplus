@@ -53,6 +53,15 @@ class task_wait_handle {
 	};
 
 public:
+	task_wait_handle()
+		: handle(nullptr) {}
+
+	// Check if the handle is valid
+	explicit operator bool() const
+	{
+		return handle != nullptr;
+	}
+
 	// Check if the task has finished executing
 	bool ready() const
 	{
@@ -143,6 +152,7 @@ namespace detail {
 template<typename Sched>
 void schedule_task(Sched& sched, task_ptr t)
 {
+	static_assert(is_scheduler<Sched>::value, "Type is not a valid scheduler");
 	sched.schedule(task_run_handle(std::move(t)));
 }
 

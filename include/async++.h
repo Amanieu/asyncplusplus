@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstdlib>
 #include <exception>
 #include <iterator>

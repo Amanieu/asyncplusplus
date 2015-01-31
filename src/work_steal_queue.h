@@ -91,7 +91,13 @@ public:
 		: array(new circular_array(32)), top(0), bottom(0) {}
 	~work_steal_queue()
 	{
-		delete array.load(std::memory_order_relaxed);
+		// Free any unexecuted tasks
+		std::size_t b = bottom.load(std::memory_order_relaxed);
+		std::size_t t = top.load(std::memory_order_relaxed);
+		circular_array* a = array.load(std::memory_order_relaxed);
+		for (std::size_t i = t; i != b; i++)
+			task_run_handle::from_void_ptr(a->get(i));
+		delete a;
 	}
 
 	// Push a task to the bottom of this thread's queue

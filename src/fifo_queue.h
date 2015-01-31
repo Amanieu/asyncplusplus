@@ -34,6 +34,12 @@ class fifo_queue {
 public:
 	fifo_queue()
 		: items(32), head(0), tail(0) {}
+	~fifo_queue()
+	{
+		// Free any unexecuted tasks
+		for (std::size_t i = head; i != tail; i = (i + 1) & (items.size() - 1))
+			task_run_handle::from_void_ptr(items[i]);
+	}
 
 	// Push a task to the end of the queue
 	void push(task_run_handle t)

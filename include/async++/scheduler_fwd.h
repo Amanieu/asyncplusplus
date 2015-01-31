@@ -24,7 +24,9 @@
 
 namespace async {
 
+// Forward declarations
 class task_run_handle;
+class threadpool_scheduler;
 
 // Scheduler interface:
 // A scheduler is any type that implements this function:
@@ -74,16 +76,9 @@ class inline_scheduler_impl {
 public:
 	static void schedule(task_run_handle t);
 };
-class default_scheduler_impl {
-public:
-	default_scheduler_impl();
-	~default_scheduler_impl();
-	LIBASYNC_EXPORT static void schedule(task_run_handle t);
-};
 
-// Run a task in a thread pool. This scheduler will wait for all tasks to finish
-// at program exit.
-LIBASYNC_EXPORT default_scheduler_impl& internal_default_scheduler();
+// Actual implementation of default_scheduler if it is not overriden
+LIBASYNC_EXPORT threadpool_scheduler& internal_default_scheduler();
 
 // Reference counted pointer to task data
 struct task_base;
@@ -97,8 +92,8 @@ void schedule_task(Sched& sched, task_ptr t);
 // active for this thread, which causes the thread to sleep by default.
 LIBASYNC_EXPORT void wait_for_task(task_base* wait_task);
 
-// Implementation details used in schedulers
-class fifo_queue;
+// Forward-declaration for data used by threadpool_scheduler
+struct threadpool_data;
 
 } // namespace detail
 
@@ -119,10 +114,12 @@ inline detail::thread_scheduler_impl& thread_scheduler()
 }
 
 // If LIBASYNC_CUSTOM_DEFAULT_SCHEDULER is defined then async::default_scheduler
-// is left undefined and should be defined by the user. Keep in mind that in
-// order to work, this function should be declared before including async++.h.
+// is left undefined and should be defined by the user. Otherwise the default
+// scheduler is a threadpool with a size that is configurable from
+// environment variables. Keep in mind that in order to work,
+// async::default_scheduler should be declared before including async++.h.
 #ifndef LIBASYNC_CUSTOM_DEFAULT_SCHEDULER
-inline detail::default_scheduler_impl& default_scheduler()
+inline threadpool_scheduler& default_scheduler()
 {
 	return detail::internal_default_scheduler();
 }
@@ -131,8 +128,8 @@ inline detail::default_scheduler_impl& default_scheduler()
 // Scheduler that holds a list of tasks which can then be explicitly executed
 // by a thread. Both adding and running tasks are thread-safe operations.
 class fifo_scheduler {
-	std::unique_ptr<detail::fifo_queue> queue;
-	std::mutex lock;
+	struct internal_data;
+	std::unique_ptr<internal_data> impl;
 
 public:
 	LIBASYNC_EXPORT fifo_scheduler();
@@ -146,6 +143,23 @@ public:
 
 	// Run all tasks in the queue
 	LIBASYNC_EXPORT void run_all_tasks();
+};
+
+// Scheduler that runs tasks in a work-stealing thread pool of the given size.
+// Note that destroying the thread pool before all tasks have completed may
+// result in some tasks not being executed.
+class threadpool_scheduler {
+	std::unique_ptr<detail::threadpool_data> impl;
+
+public:
+	// Create a thread pool with the given number of threads
+	LIBASYNC_EXPORT threadpool_scheduler(std::size_t num_threads);
+
+	// Destroy the thread pool, tasks that haven't been started are dropped
+	LIBASYNC_EXPORT ~threadpool_scheduler();
+
+	// Schedule a task to be run in the thread pool
+	LIBASYNC_EXPORT void schedule(task_run_handle t);
 };
 
 } // namespace async

@@ -56,8 +56,8 @@ struct parallel_invoke_internal<Index, 0> {
 } // namespace detail
 
 // Run several functions in parallel, optionally using the specified scheduler.
-template<typename Sched, typename... Args>
-typename std::enable_if<detail::is_scheduler<Sched>::value>::type parallel_invoke(Sched& sched, Args&&... args)
+template<typename Sched, typename... Args, typename = typename std::enable_if<detail::is_scheduler<Sched>::value>::type>
+void parallel_invoke(Sched& sched, Args&&... args)
 {
 	detail::parallel_invoke_internal<0, sizeof...(Args)>::run(sched, std::forward_as_tuple(std::forward<Args>(args)...));
 }
