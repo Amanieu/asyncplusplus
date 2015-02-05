@@ -57,6 +57,8 @@
 #  endif
 # elif defined(__GNUC__) && !defined(__EXCEPTIONS)
 #  define LIBASYNC_NO_EXCEPTIONS
+# elif defined(_MSC_VER) && defined(_HAS_EXCEPTIONS) && !_HAS_EXCEPTIONS
+#  define LIBASYNC_NO_EXCEPTIONS
 # endif
 #endif
 #ifdef LIBASYNC_NO_EXCEPTIONS

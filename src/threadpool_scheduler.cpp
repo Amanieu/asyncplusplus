@@ -196,7 +196,7 @@ static void worker_thread(threadpool_data* impl, std::size_t id)
 
 	// Seed the random number generator with our id. This gives each thread a
 	// different steal order.
-	impl->thread_data[thread_id].rng.seed(thread_id);
+	impl->thread_data[thread_id].rng.seed(static_cast<std::minstd_rand::result_type>(thread_id));
 
 	// Main loop, runs until the shutdown signal is recieved
 	thread_task_loop(impl, task_wait_handle());

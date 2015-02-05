@@ -85,16 +85,16 @@ public:
 	// Free any left over data
 	~continuation_vector()
 	{
-		// Using task_ptr{} instead of remove_ref because task_base isn't
-		// defined yet at this point.
+		// Converting task_ptr instead of using remove_ref because task_base
+		// isn't defined yet at this point.
 		internal_data data = atomic_data.load(std::memory_order_relaxed);
 		if (!data.is_vector) {
 			// If the data is locked then the inline pointer is already gone
 			if (!data.is_locked)
-				task_ptr{data.inline_ptr};
+				task_ptr tmp(data.inline_ptr);
 		} else {
-			for (auto i: data.vector_ptr->vector)
-				task_ptr{i};
+			for (task_base* i: data.vector_ptr->vector)
+				task_ptr tmp(i);
 			delete data.vector_ptr;
 		}
 	}

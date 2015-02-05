@@ -50,7 +50,7 @@ public:
 			c.wait(lock);
 		int result = event_mask;
 		event_mask = 0;
-		return result;
+		return result != 0;
 	}
 
 	// Check if a specific event is ready
@@ -59,7 +59,7 @@ public:
 		std::unique_lock<std::mutex> lock(m);
 		int result = event_mask & event;
 		event_mask &= ~event;
-		return result;
+		return result != 0;
 	}
 
 	// Signal an event and wake up a sleeping thread

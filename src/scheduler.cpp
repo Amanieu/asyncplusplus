@@ -128,9 +128,21 @@ class default_scheduler_impl: public threadpool_scheduler {
 	std::size_t get_num_threads()
 	{
 		// Get the requested number of threads from the environment
-		// If that fails, use the number of CPUs in the system
-		const char *s = std::getenv("LIBASYNC_NUM_THREADS");
+		// If that fails, use the number of CPUs in the system.
 		std::size_t num_threads;
+#ifdef _MSC_VER
+		char* s;
+# ifdef __cplusplus_winrt
+		// Windows store applications do not support environment variables
+		s = nullptr;
+# else
+		// MSVC gives an error when trying to use getenv, work around this
+		// by using _dupenv_s instead.
+		_dupenv_s(&s, nullptr, "LIBASYNC_NUM_THREADS");
+#endif
+#else
+		const char *s = std::getenv("LIBASYNC_NUM_THREADS");
+#endif
 		if (s)
 			num_threads = std::strtoul(s, nullptr, 10);
 		else
