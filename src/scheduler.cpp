@@ -65,7 +65,7 @@ static void generic_wait_handler(task_wait_handle wait_task)
 }
 
 // Wait handler function, per-thread, defaults to generic version
-static thread_local wait_handler thread_wait_handler = generic_wait_handler;
+static THREAD_LOCAL wait_handler thread_wait_handler = generic_wait_handler;
 
 // Wait for a task to complete
 void wait_for_task(task_base* wait_task)
@@ -74,58 +74,10 @@ void wait_for_task(task_base* wait_task)
 	thread_wait_handler(task_wait_handle(wait_task));
 }
 
-// Singleton wrapper class
-#if defined(__GNUC__) && !defined(__INTEL_COMPILER)
-// C++11 guarantees thread safety for static initialization
-template<typename T>
-class singleton {
-public:
-	static T& get_instance()
-	{
-		static T instance;
-		return instance;
-	}
-};
-#else
-// Intel and MSVC don't support thread-safe static initialization, so emulate it
-template<typename T>
-class singleton {
-	std::mutex lock;
-	std::atomic<bool> init_flag;
-	typename std::aligned_storage<sizeof(T), std::alignment_of<T>::value>::type storage;
-
-	static singleton instance;
-
-	// Use a destructor instead of atexit() because the latter does not work
-	// properly when the singleton is in a library that is unloaded.
-	~singleton()
-	{
-		if (init_flag.load(std::memory_order_acquire))
-			reinterpret_cast<T*>(&storage)->~T();
-	}
-
-public:
-	static T& get_instance()
-	{
-		T* ptr = reinterpret_cast<T*>(&instance.storage);
-		if (!instance.init_flag.load(std::memory_order_acquire)) {
-			std::lock_guard<std::mutex> locked(instance.lock);
-			if (!instance.init_flag.load(std::memory_order_relaxed)) {
-				new(ptr) T;
-				instance.init_flag.store(true, std::memory_order_release);
-			}
-		}
-		return *ptr;
-	}
-};
-
-template<typename T> singleton<T> singleton<T>::instance;
-#endif
-
 // The default scheduler is just a thread pool which can be configured
 // using environment variables.
 class default_scheduler_impl: public threadpool_scheduler {
-	std::size_t get_num_threads()
+	static std::size_t get_num_threads()
 	{
 		// Get the requested number of threads from the environment
 		// If that fails, use the number of CPUs in the system.
@@ -226,5 +178,5 @@ wait_handler set_thread_wait_handler(wait_handler handler)
 } // namespace async
 
 #if defined(__GNUC__) && !defined(_WIN32)
-#pragma GCC visibility pop
+# pragma GCC visibility pop
 #endif

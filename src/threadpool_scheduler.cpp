@@ -60,10 +60,10 @@ struct threadpool_data {
 };
 
 // Thread pool this thread belongs to, or null if not in pool
-static thread_local threadpool_data* owning_threadpool = nullptr;
+static THREAD_LOCAL threadpool_data* owning_threadpool = nullptr;
 
 // Current thread's index in the pool
-static thread_local std::size_t thread_id;
+static THREAD_LOCAL std::size_t thread_id;
 
 // Try to steal a task from another thread's queue
 static task_run_handle steal_task(threadpool_data* impl)
@@ -302,5 +302,5 @@ void threadpool_scheduler::schedule(task_run_handle t)
 } // namespace async
 
 #if defined(__GNUC__) && !defined(_WIN32)
-#pragma GCC visibility pop
+# pragma GCC visibility pop
 #endif

@@ -44,37 +44,37 @@
 # include <stdlib.h>
 #endif
 
-// thread_local keyword support
-#ifdef __clang__
-# if __has_feature(cxx_thread_local)
-#  define HAVE_THREAD_LOCAL
-# endif
-#elif !defined(__INTEL_COMPILER) && __GNUC__ * 100 + __GNUC_MINOR__ >= 408
-# define HAVE_THREAD_LOCAL
+// We don't make use of dynamic TLS initialization/destruction so we can just
+// use the legacy TLS attributes.
+#ifdef __GNUC__
+# define  THREAD_LOCAL __thread
+#elif defined (_MSC_VER)
+# define THREAD_LOCAL __declspec(thread)
+#else
+# define THREAD_LOCAL thread_local
 #endif
 
-// For compilers that don't support thread_local, use __thread/declspec(thread)
-// which have the same semantics but doesn't support dynamic initialization/destruction.
-#ifndef HAVE_THREAD_LOCAL
-# ifdef _MSC_VER
-#  define thread_local __declspec(thread)
-# else
-#  define thread_local __thread
-# endif
+// GCC, Clang and the Linux version of the Intel compiler and MSVC 2015 support
+// thread-safe initialization of function-scope static variables.
+#ifdef __GNUC__
+# define HAVE_THREAD_SAFE_STATIC
+#elif _MSC_VER >= 1900 && !defined(__INTEL_COMPILER)
+# define HAVE_THREAD_SAFE_STATIC
 #endif
 
 // MSVC deadlocks when joining a thread from a static destructor. Use a
 // workaround in that case to avoid the deadlock.
-#ifdef _MSC_VER
-#define BROKEN_JOIN_IN_DESTRUCTOR
+#if defined(_MSC_VER) && _MSC_VER < 1900
+# define BROKEN_JOIN_IN_DESTRUCTOR
 #endif
 
 // Force symbol visibility to hidden unless explicity exported
 #if defined(__GNUC__) && !defined(_WIN32)
-#pragma GCC visibility push(hidden)
+# pragma GCC visibility push(hidden)
 #endif
 
 // Include other internal headers
+#include "singleton.h"
 #include "task_wait_event.h"
 #include "fifo_queue.h"
 #include "work_steal_queue.h"

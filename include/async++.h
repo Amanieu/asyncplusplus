@@ -76,10 +76,10 @@
 // Annotate move constructors and move assignment with noexcept to allow objects
 // to be moved if they are in containers. Compilers which don't support noexcept
 // will usually move regardless.
-#ifdef __GNUC__
-#define LIBASYNC_NOEXCEPT noexcept
+#if defined(__GNUC__) || _MSC_VER >= 1900
+# define LIBASYNC_NOEXCEPT noexcept
 #else
-#define LIBASYNC_NOEXCEPT
+# define LIBASYNC_NOEXCEPT
 #endif
 
 // Cacheline alignment to avoid false sharing between different threads
@@ -94,7 +94,7 @@
 
 // Force symbol visibility to hidden unless explicity exported
 #if defined(__GNUC__) && !defined(_WIN32)
-#pragma GCC visibility push(hidden)
+# pragma GCC visibility push(hidden)
 #endif
 
 // Some forward declarations
@@ -126,7 +126,7 @@ class event_task;
 #include "async++/parallel_reduce.h"
 
 #if defined(__GNUC__) && !defined(_WIN32)
-#pragma GCC visibility pop
+# pragma GCC visibility pop
 #endif
 
 #endif
