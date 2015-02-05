@@ -22,12 +22,12 @@ namespace async {
 namespace detail {
 
 // Set of events that an task_wait_event can hold
-enum {
+enum wait_type {
 	// The task that is being waited on has completed
-	EVENT_TASK_FINISHED = 1,
+	task_finished = 1,
 
 	// A task is available to execute from the scheduler
-	EVENT_TASK_AVAILABLE = 2
+	task_available = 2
 };
 
 // OS-supported event object which can be used to wait for either a task to

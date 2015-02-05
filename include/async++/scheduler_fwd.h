@@ -56,7 +56,7 @@ class scheduler_ref {
 
 public:
 	// Wrap the given scheduler type
-	scheduler_ref() {}
+	scheduler_ref() = default;
 	template<typename T> explicit scheduler_ref(T& sched)
 		: sched_ptr(std::addressof(sched)), sched_func(invoke_sched<T>) {}
 

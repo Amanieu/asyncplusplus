@@ -57,7 +57,7 @@ static void generic_wait_handler(task_wait_handle wait_task)
 	// Create a continuation for the task we are waiting for
 	wait_task.on_finish([&thread_event] {
 		// Just signal the thread event
-		thread_event.signal(EVENT_TASK_FINISHED);
+		thread_event.signal(wait_type::task_finished);
 	});
 
 	// Wait for the event to be set

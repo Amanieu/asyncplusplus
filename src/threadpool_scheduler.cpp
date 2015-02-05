@@ -103,7 +103,7 @@ static void thread_task_loop(threadpool_data* impl, task_wait_handle wait_task)
 	while (true) {
 		// Check if the task has finished. If we have added a continuation, we
 		// need to make sure the event has been signaled.
-		if (wait_task && (added_continuation ? current_thread.event.try_wait(EVENT_TASK_FINISHED) : wait_task.ready()))
+		if (wait_task && (added_continuation ? current_thread.event.try_wait(wait_type::task_finished) : wait_task.ready()))
 			return;
 
 		// Try to get a task from the local queue
@@ -146,7 +146,7 @@ static void thread_task_loop(threadpool_data* impl, task_wait_handle wait_task)
 				task_wait_event& event = current_thread.event;
 				wait_task.on_finish([&event] {
 					// Signal the thread's event
-					event.signal(EVENT_TASK_FINISHED);
+					event.signal(wait_type::task_finished);
 				});
 				added_continuation = true;
 			}
@@ -171,7 +171,7 @@ static void thread_task_loop(threadpool_data* impl, task_wait_handle wait_task)
 			}
 
 			// Check again if the task has finished
-			if (wait_task && (events & EVENT_TASK_FINISHED))
+			if (wait_task && (events & wait_type::task_finished))
 				return;
 		}
 	}
@@ -246,7 +246,7 @@ threadpool_scheduler::~threadpool_scheduler()
 
 		// Wake up any sleeping threads
 		for (std::size_t i = 0; i < impl->num_waiters; i++)
-			impl->waiters[i]->signal(detail::EVENT_TASK_AVAILABLE);
+			impl->waiters[i]->signal(detail::wait_type::task_available);
 		impl->num_waiters = 0;
 
 #ifdef BROKEN_JOIN_IN_DESTRUCTOR
@@ -285,7 +285,7 @@ void threadpool_scheduler::schedule(task_run_handle t)
 			return;
 
 		// Pop a thread from the list and wake it up
-		impl->waiters[--impl->num_waiters]->signal(detail::EVENT_TASK_AVAILABLE);
+		impl->waiters[--impl->num_waiters]->signal(detail::wait_type::task_available);
 	} else {
 		std::lock_guard<std::mutex> locked(impl->lock);
 
@@ -295,7 +295,7 @@ void threadpool_scheduler::schedule(task_run_handle t)
 		// Wake up a sleeping thread
 		if (impl->num_waiters == 0)
 			return;
-		impl->waiters[--impl->num_waiters]->signal(detail::EVENT_TASK_AVAILABLE);
+		impl->waiters[--impl->num_waiters]->signal(detail::wait_type::task_available);
 	}
 }
 

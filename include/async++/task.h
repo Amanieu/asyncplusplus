@@ -203,10 +203,7 @@ class basic_event {
 public:
 	// Movable but not copyable
 	basic_event(basic_event&& other) LIBASYNC_NOEXCEPT
-		: internal_task(std::move(other.internal_task))
-	{
-		other.internal_task = nullptr;
-	}
+		: internal_task(std::move(other.internal_task)) {}
 	basic_event& operator=(basic_event&& other) LIBASYNC_NOEXCEPT
 	{
 		std::swap(internal_task, other.internal_task);
@@ -271,7 +268,7 @@ template<typename Result>
 class task: public detail::basic_task<Result> {
 public:
 	// Movable but not copyable
-	task() {}
+	task() = default;
 	task(task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_task<Result>(std::move(other)) {}
 	task& operator=(task&& other) LIBASYNC_NOEXCEPT
@@ -331,7 +328,7 @@ class shared_task: public detail::basic_task<Result> {
 
 public:
 	// Movable and copyable
-	shared_task() {}
+	shared_task() = default;
 
 	// Get the result of the task
 	get_result get() const
@@ -358,7 +355,7 @@ template<typename Result>
 class event_task: public detail::basic_event<Result> {
 public:
 	// Movable but not copyable
-	event_task() {}
+	event_task() = default;
 	event_task(event_task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_event<Result>(std::move(other)) {}
 	event_task& operator=(event_task&& other) LIBASYNC_NOEXCEPT
@@ -383,7 +380,7 @@ template<typename Result>
 class event_task<Result&>: public detail::basic_event<Result&> {
 public:
 	// Movable but not copyable
-	event_task() {}
+	event_task() = default;
 	event_task(event_task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_event<Result&>(std::move(other)) {}
 	event_task& operator=(event_task&& other) LIBASYNC_NOEXCEPT
@@ -404,7 +401,7 @@ template<>
 class event_task<void>: public detail::basic_event<void> {
 public:
 	// Movable but not copyable
-	event_task() {}
+	event_task() = default;
 	event_task(event_task&& other) LIBASYNC_NOEXCEPT
 		: detail::basic_event<void>(std::move(other)) {}
 	event_task& operator=(event_task&& other) LIBASYNC_NOEXCEPT
@@ -453,11 +450,11 @@ class LIBASYNC_CACHELINE_ALIGN local_task {
 		detail::schedule_task(sched, detail::task_ptr(&internal_task));
 	}
 
-	// Non-movable and non-copyable
-	local_task(const local_task&);
-	local_task& operator=(const local_task&);
-
 public:
+	// Non-movable and non-copyable
+	local_task(const local_task&) = delete;
+	local_task& operator=(const local_task&) = delete;
+
 	// Wait for the task to complete when destroying
 	~local_task()
 	{

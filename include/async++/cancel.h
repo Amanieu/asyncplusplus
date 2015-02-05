@@ -31,13 +31,13 @@ struct LIBASYNC_EXPORT task_canceled {};
 class cancellation_token {
 	std::atomic<bool> state;
 
-	// Non-copyable and non-movable
-	cancellation_token(const cancellation_token&);
-	cancellation_token& operator=(const cancellation_token&);
-
 public:
 	cancellation_token()
 		: state(false) {}
+
+	// Non-copyable and non-movable
+	cancellation_token(const cancellation_token&) = delete;
+	cancellation_token& operator=(const cancellation_token&) = delete;
 
 	bool is_canceled() const
 	{

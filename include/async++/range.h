@@ -30,7 +30,7 @@ class range {
 	Iter iter_begin, iter_end;
 
 public:
-	range() {}
+	range() = default;
 	range(Iter a, Iter b)
 		: iter_begin(a), iter_end(b) {}
 
@@ -73,7 +73,7 @@ public:
 		typedef T reference;
 		typedef std::random_access_iterator_tag iterator_category;
 
-		iterator() {}
+		iterator() = default;
 
 		T operator*() const
 		{
