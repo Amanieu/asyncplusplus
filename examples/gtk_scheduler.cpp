@@ -25,7 +25,7 @@
 #include <string>
 
 // Scheduler implementation
-class gtk_scheduler_impl: public async::scheduler {
+class gtk_scheduler_impl {
 	// Get the task from the void* and execute it in the UI thread
 	static gboolean callback(void* p)
 	{
@@ -35,14 +35,14 @@ class gtk_scheduler_impl: public async::scheduler {
 
 public:
 	// Convert a task to void* and send it to the gtk main loop
-	virtual void schedule(async::task_run_handle t) override final
+	void schedule(async::task_run_handle t)
 	{
 		g_idle_add(callback, t.to_void_ptr());
 	}
 };
 
 // Scheduler to run a task in the gtk main loop
-async::scheduler& gtk_scheduler()
+gtk_scheduler_impl& gtk_scheduler()
 {
 	static gtk_scheduler_impl sched;
 	return sched;
