@@ -25,7 +25,7 @@
 namespace async {
 
 // Exception thrown by cancel_current_task()
-struct LIBASYNC_EXPORT task_canceled {};
+struct LIBASYNC_EXPORT_EXCEPTION task_canceled {};
 
 // A flag which can be used to request cancellation
 class cancellation_token {

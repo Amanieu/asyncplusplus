@@ -25,7 +25,7 @@
 namespace async {
 
 // Exception thrown when an event_task is destroyed without setting a value
-struct LIBASYNC_EXPORT abandoned_event_task {};
+struct LIBASYNC_EXPORT_EXCEPTION abandoned_event_task {};
 
 namespace detail {
 

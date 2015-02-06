@@ -34,7 +34,7 @@ class task_wait_handle {
 	detail::task_base* handle;
 
 	// Allow construction in wait_for_task()
-	friend void detail::wait_for_task(detail::task_base* t);
+	friend LIBASYNC_EXPORT void detail::wait_for_task(detail::task_base* t);
 	task_wait_handle(detail::task_base* t)
 		: handle(t) {}
 

@@ -39,6 +39,7 @@
 // Export declaration to make symbols visible for dll/so
 #ifdef LIBASYNC_STATIC
 # define LIBASYNC_EXPORT
+# define LIBASYNC_EXPORT_EXCEPTION
 #else
 # ifdef _WIN32
 #  ifdef LIBASYNC_BUILD
@@ -46,8 +47,10 @@
 #  else
 #   define LIBASYNC_EXPORT __declspec(dllimport)
 #  endif
+#  define LIBASYNC_EXPORT_EXCEPTION
 # else
 #  define LIBASYNC_EXPORT __attribute__((visibility("default")))
+#  define LIBASYNC_EXPORT_EXCEPTION __attribute__((visibility("default")))
 # endif
 #endif
 
