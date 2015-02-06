@@ -24,7 +24,9 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <iterator>
 #include <memory>
@@ -114,6 +116,7 @@ class event_task;
 #include "async++/aligned_alloc.h"
 #include "async++/ref_count.h"
 #include "async++/scheduler_fwd.h"
+#include "async++/continuation_vector.h"
 #include "async++/task_base.h"
 #include "async++/scheduler.h"
 #include "async++/task.h"
