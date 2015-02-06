@@ -472,6 +472,12 @@ public:
 		return internal_task.ready();
 	}
 
+	// Query whether the task has been canceled with an exception
+	bool canceled() const
+	{
+		return internal_task.state.load(std::memory_order_acquire) == detail::task_state::canceled;
+	}
+
 	// Wait for the task to complete
 	void wait()
 	{
