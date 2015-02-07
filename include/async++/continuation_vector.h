@@ -171,12 +171,10 @@ public:
 					// Going from 1 to 2 elements, allocate a vector_data
 					if (!vector)
 						vector.reset(new vector_data{{data.get_ptr<task_base>(), t.get()}, {}});
-					new_data.set_ptr(vector.get());
-					new_data.set_flags(flags::is_vector);
+					new_data = {vector.get(), flags::is_vector};
 				} else {
 					// Going from 0 to 1 elements
-					new_data.set_ptr(t.get());
-					new_data.set_flags(0);
+					new_data = {t.get(), 0};
 				}
 			}
 		} while (!atomic_data.compare_exchange_weak(data, new_data, std::memory_order_release, std::memory_order_relaxed));

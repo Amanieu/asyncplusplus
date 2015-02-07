@@ -429,7 +429,7 @@ public:
 
 // Task type returned by local_spawn()
 template<typename Func>
-class LIBASYNC_CACHELINE_ALIGN local_task {
+class local_task {
 	// Make sure the function type is callable
 	static_assert(detail::is_callable<Func()>::value, "Invalid function type passed to local_spawn()");
 

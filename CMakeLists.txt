@@ -75,6 +75,9 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 target_link_libraries(Async++ PUBLIC Threads::Threads)
 
+# Minimize the set of symbols exported by libraries
+set_target_properties(Async++ PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+
 # Set up preprocessor definitions
 target_include_directories(Async++ PRIVATE ${PROJECT_SOURCE_DIR}/include)
 set_target_properties(Async++ PROPERTIES DEFINE_SYMBOL LIBASYNC_BUILD)
