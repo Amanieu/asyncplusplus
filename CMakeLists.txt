@@ -23,7 +23,6 @@ project(Async++ C CXX)
 
 option(BUILD_SHARED_LIBS "Build Async++ as a shared library" ON)
 option(USE_CXX_EXCEPTIONS "Enable C++ exception support" ON)
-option(USE_AMD64_CMPXCHG16B "Use the CMPXCHG16B instruction on x86_64" ON)
 if (APPLE)
 	option(BUILD_FRAMEWORK "Build a Mac OS X framework instead of a library" OFF)
 	if (BUILD_FRAMEWORK AND NOT BUILD_SHARED_LIBS)
@@ -50,7 +49,7 @@ set(ASYNCXX_INCLUDE
 	${PROJECT_SOURCE_DIR}/include/async++/when_all_any.h
 )
 set(ASYNCXX_SRC
-	${PROJECT_SOURCE_DIR}/src/common.h
+	${PROJECT_SOURCE_DIR}/src/internal.h
 	${PROJECT_SOURCE_DIR}/src/fifo_queue.h
 	${PROJECT_SOURCE_DIR}/src/scheduler.cpp
 	${PROJECT_SOURCE_DIR}/src/singleton.h
@@ -74,7 +73,7 @@ if (APPLE)
 endif()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-target_link_libraries(Async++ PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(Async++ PUBLIC Threads::Threads)
 
 # Set up preprocessor definitions
 target_include_directories(Async++ PRIVATE ${PROJECT_SOURCE_DIR}/include)
@@ -105,16 +104,6 @@ if (NOT USE_CXX_EXCEPTIONS)
 	else()
 		target_compile_options(Async++ PUBLIC -fno-exceptions)
 	endif()
-endif()
-
-# Allow disabling the CMPXCHG16B instruction which is not available on some
-# early AMD64 processors. This will result in 128-bit atomics being implemented
-# using the default implementation in std::atomic, which uses a lock.
-if (NOT USE_AMD64_CMPXCHG16B)
-	message(WARNING "The CMPXCHG16B instruction has been disabled. Make sure "
-	        "to define LIBASYNC_NO_CMPXCHG16B in all files that include "
-	        "async++.h because this affects the library ABI.")
-	target_compile_definitions(Async++ PUBLIC LIBASYNC_NO_CMPXCHG16B)
 endif()
 
 # Install the library and produce a CMake export script

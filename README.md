@@ -21,15 +21,18 @@ int main()
         return 42;
     });
     auto task3 = task2.then([](int value) -> int {
-        std::cout << "Task 3 executes after task 2, which returned " << value << std::endl;
+        std::cout << "Task 3 executes after task 2, which returned "
+                  << value << std::endl;
         return value * 3;
     });
-    auto task4 = async::when_all(task1, task3).then([](std::tuple<async::void_, int> results) {
-        std::cout << "Task 4 executes after tasks 1 and 3. Task 3 returned " << std::get<1>(results) << std::endl;
+    auto task4 = async::when_all(task1, task3);
+    auto task5 = task4.then([](std::tuple<async::void_, int> results) {
+        std::cout << "Task 5 executes after tasks 1 and 3. Task 3 returned "
+                  << std::get<1>(results) << std::endl;
     });
 
-    task4.get();
-    std::cout << "Task 4 has completed" << std::endl;
+    task5.get();
+    std::cout << "Task 5 has completed" << std::endl;
 
     async::parallel_invoke([] {
         std::cout << "This is executed in parallel..." << std::endl;
@@ -52,8 +55,8 @@ int main()
 // Task 1 executes asynchronously
 // Task 2 executes in parallel with task 1
 // Task 3 executes after task 2, which returned 42
-// Task 4 executes after tasks 1 and 3. Task 3 returned 126
-// Task 4 has completed
+// Task 5 executes after tasks 1 and 3. Task 3 returned 126
+// Task 5 has completed
 // This is executed in parallel...
 // with this
 // 01234
