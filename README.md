@@ -73,13 +73,13 @@ Building and Installing
 -----------------------
 Instructions for compiling Async++ and using it in your code are available on the [Building and Installing](https://github.com/Amanieu/asyncplusplus/wiki/Building-and-Installing) page.
 
-Tutorial
---------
-The [Tutorial](https://github.com/Amanieu/asyncplusplus/wiki/Tutorial) provides a step-by-step guide to all the features of Async++.
-
-API Reference
--------------
-The [API Reference](https://github.com/Amanieu/asyncplusplus/wiki/API-Reference) gives detailed descriptions of all the classes and functions available in Async++.
+Documentation
+------------
+The Async++ documentation is split into four parts:
+- [Tasks](https://github.com/Amanieu/asyncplusplus/wiki/Tasks): This describes task objects which are the core Async++. Reading this first is strongly recommended.
+- [Parallel algorithms](https://github.com/Amanieu/asyncplusplus/wiki/Parallel-algorithms): This describes functions to run work on ranges in parallel.
+- [Schedulers](https://github.com/Amanieu/asyncplusplus/wiki/Schedulers): This describes the low-level details of Async++ and how to customize it.
+- [API Reference](https://github.com/Amanieu/asyncplusplus/wiki/API-Reference): This gives detailed descriptions of all the classes and functions available in Async++.
 
 Contact
 -------

@@ -51,20 +51,18 @@ public:
 	{
 		state.store(true, std::memory_order_release);
 	}
+
+	void reset()
+	{
+		state.store(false, std::memory_order_relaxed);
+	}
 };
 
-// Cancel the current task by throwing a task_canceled exception. This is
-// prefered to another exception type because it is handled more efficiently.
-inline void cancel_current_task()
-{
-	LIBASYNC_THROW(task_canceled());
-}
-
-// Interruption point, calls cancel_current_task if the specified token is set.
+// Interruption point, throws task_canceled if the specified token is set.
 inline void interruption_point(const cancellation_token& token)
 {
 	if (token.is_canceled())
-		cancel_current_task();
+		LIBASYNC_THROW(task_canceled());
 }
 
 } // namespace async

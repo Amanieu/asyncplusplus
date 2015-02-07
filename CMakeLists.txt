@@ -112,7 +112,7 @@ endif()
 # using the default implementation in std::atomic, which uses a lock.
 if (NOT USE_AMD64_CMPXCHG16B)
 	message(WARNING "The CMPXCHG16B instruction has been disabled. Make sure "
-	        "to define LIBASyNC_NO_CMPXCHG16B in all files that include "
+	        "to define LIBASYNC_NO_CMPXCHG16B in all files that include "
 	        "async++.h because this affects the library ABI.")
 	target_compile_definitions(Async++ PUBLIC LIBASYNC_NO_CMPXCHG16B)
 endif()

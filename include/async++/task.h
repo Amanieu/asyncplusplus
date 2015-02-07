@@ -232,7 +232,7 @@ public:
 	}
 
 	// Get the task linked to this event. This can only be called once.
-	task<Result> get_task() const
+	task<Result> get_task()
 	{
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects

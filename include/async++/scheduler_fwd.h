@@ -51,6 +51,7 @@ class scheduler_ref {
 	template<typename T>
 	static void invoke_sched(void* sched, task_run_handle&& t)
 	{
+		static_assert(is_scheduler<T>::value, "Type is not a valid scheduler");
 		static_cast<T*>(sched)->schedule(std::move(t));
 	}
 
