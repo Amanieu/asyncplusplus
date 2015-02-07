@@ -25,8 +25,17 @@
 namespace async {
 namespace detail {
 
-// Reference-counted object base class
+// Default deleter which just uses the delete keyword
 template<typename T>
+struct default_deleter {
+	static void do_delete(T* p)
+	{
+		delete p;
+	}
+};
+
+// Reference-counted object base class
+template<typename T, typename Deleter = default_deleter<T>>
 struct ref_count_base {
 	std::atomic<std::size_t> ref_count;
 
@@ -42,7 +51,7 @@ struct ref_count_base {
 	{
 		if (ref_count.fetch_sub(count, std::memory_order_release) == count) {
 			std::atomic_thread_fence(std::memory_order_acquire);
-			delete static_cast<T*>(this);
+			Deleter::do_delete(static_cast<T*>(this));
 		}
 	}
 	void add_ref_unlocked()

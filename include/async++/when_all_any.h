@@ -138,7 +138,7 @@ void when_all_variadic(when_all_state_variadic<State>* state_ptr, First&& first,
 				if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
 					std::get<index>(state->results) = detail::get_internal_task(t)->get_result(t);
 				else
-					state->event.set_exception(detail::get_internal_task(t)->except);
+					state->event.set_exception(detail::get_internal_task(t)->get_exception());
 			} LIBASYNC_CATCH(...) {
 				// If the assignment of the result threw, propagate the exception
 				state->event.set_exception(std::current_exception());
@@ -170,7 +170,7 @@ void when_any_variadic(when_any_state<State>* state_ptr, First&& first, T&&... t
 				if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
 					state->set(index, detail::get_internal_task(t)->get_result(t));
 				else
-					state->event.set_exception(detail::get_internal_task(t)->except);
+					state->event.set_exception(detail::get_internal_task(t)->get_exception());
 			} LIBASYNC_CATCH(...) {
 				// If the copy/move constructor of the result threw, propagate the exception
 				state->event.set_exception(std::current_exception());
@@ -216,7 +216,7 @@ task<typename detail::when_all_state_range<typename std::iterator_traits<Iter>::
 					if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
 						state->set(i, detail::get_internal_task(t)->get_result(t));
 					else
-						state->event.set_exception(detail::get_internal_task(t)->except);
+						state->event.set_exception(detail::get_internal_task(t)->get_exception());
 				} LIBASYNC_CATCH(...) {
 					// If the assignment of the result threw, propagate the exception
 					state->event.set_exception(std::current_exception());
@@ -258,7 +258,7 @@ task<typename detail::when_any_state<typename std::iterator_traits<Iter>::value_
 					if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
 						state->set(i, detail::get_internal_task(t)->get_result(t));
 					else
-						state->event.set_exception(detail::get_internal_task(t)->except);
+						state->event.set_exception(detail::get_internal_task(t)->get_exception());
 				} LIBASYNC_CATCH(...) {
 					// If the copy/move constructor of the result threw, propagate the exception
 					state->event.set_exception(std::current_exception());

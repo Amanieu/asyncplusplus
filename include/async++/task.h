@@ -59,7 +59,7 @@ class basic_task {
 #endif
 
 		// If the task was canceled, throw the associated exception
-		internal_task->wait_and_throw();
+		get_internal_task(*this)->wait_and_throw();
 	}
 
 	// Common code for then()
@@ -88,7 +88,7 @@ class basic_task {
 		// Add the continuation to this task
 		// Avoid an expensive ref-count modification since the task isn't shared yet
 		get_internal_task(cont)->add_ref_unlocked();
-		my_internal->add_continuation(sched, task_ptr(get_internal_task(cont)));
+		my_internal->add_continuation(sched, task_ptr(get_internal_task(cont)), &static_cast<internal_task_type*>(my_internal)->get_exception());
 
 		return cont;
 	}
@@ -149,7 +149,7 @@ public:
 #endif
 
 		if (internal_task->wait() == task_state::canceled)
-			return internal_task->except;
+			return get_internal_task(*this)->get_exception();
 		else
 			return std::exception_ptr();
 	}
@@ -169,6 +169,8 @@ class basic_event {
 
 	// Friend access
 	friend async::event_task<Result>;
+	template<typename T>
+	friend typename T::internal_task_type* get_internal_task(const T& t);
 
 	// Common code for set()
 	template<typename T>
@@ -187,7 +189,7 @@ class basic_event {
 
 		LIBASYNC_TRY {
 			// Store the result and finish
-			static_cast<internal_task_type*>(internal_task.get())->set_result(std::forward<T>(result));
+			get_internal_task(*this)->set_result(std::forward<T>(result));
 			internal_task->finish();
 		} LIBASYNC_CATCH(...) {
 			// At this point we have already committed to setting a value, so
@@ -195,7 +197,7 @@ class basic_event {
 			// could cause concurrent set() calls to fail, thinking a value has
 			// already been set. Instead, we simply cancel the task with the
 			// exception we just got.
-			internal_task->cancel_base(std::current_exception());
+			get_internal_task(*this)->cancel_base(std::current_exception());
 		}
 		return true;
 	}
@@ -267,7 +269,7 @@ public:
 			return false;
 
 		// Cancel the task
-		internal_task->cancel_base(std::move(except));
+		get_internal_task(*this)->cancel_base(std::move(except));
 		return true;
 	}
 };
@@ -505,7 +507,7 @@ public:
 	std::exception_ptr get_exception() const
 	{
 		if (internal_task.wait() == detail::task_state::canceled)
-			return internal_task.except;
+			return internal_task.get_exception();
 		else
 			return std::exception_ptr();
 	}

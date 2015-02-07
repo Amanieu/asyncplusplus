@@ -69,11 +69,13 @@
 #ifdef LIBASYNC_NO_EXCEPTIONS
 # define LIBASYNC_THROW(...) std::abort()
 # define LIBASYNC_RETHROW() do {} while (false)
+# define LIBASYNC_RETHROW_EXCEPTION(except) std::abort()
 # define LIBASYNC_TRY if (true)
 # define LIBASYNC_CATCH(...) else if (false)
 #else
 # define LIBASYNC_THROW(...) throw __VA_ARGS__
 # define LIBASYNC_RETHROW() throw
+# define LIBASYNC_RETHROW_EXCEPTION(except) std::rethrow_exception(except)
 # define LIBASYNC_TRY try
 # define LIBASYNC_CATCH(...) catch (__VA_ARGS__)
 #endif

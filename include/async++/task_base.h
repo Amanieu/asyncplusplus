@@ -29,6 +29,7 @@ namespace detail {
 enum class task_state: unsigned char {
 	pending, // Task has not completed yet
 	locked, // Task is locked (used by event_task to prevent double set)
+	unwrapped, // Task is waiting for an unwrapped task to finish
 	completed, // Task has finished execution and a result is available
 	canceled // Task has been canceled and an exception is available
 };
@@ -39,15 +40,24 @@ inline bool is_finished(task_state s)
 	return s == task_state::completed || s == task_state::canceled;
 }
 
-// Operations for dispatch function
-enum class dispatch_op {
-	execute,
-	cancel_hook,
-	destroy
+// Virtual function table used to allow dynamic dispatch for task objects.
+// While this is very similar to what a compiler would generate with virtual
+// functions, this scheme was found to result in significantly smaller
+// generated code size.
+struct task_base_vtable {
+	// Destroy the function and result
+	void (*destroy)(task_base*);
+
+	// Run the associated function
+	void (*run)(task_base*);
+
+	// Cancel the task with an exception
+	void (*cancel)(task_base*, std::exception_ptr&&);
 };
 
 // Type-generic base task object
-struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
+struct task_base_deleter;
+struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base, task_base_deleter> {
 	// Task state
 	std::atomic<task_state> state;
 
@@ -63,14 +73,8 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 	// Scheduler to be used to schedule this task
 	scheduler_ref sched;
 
-	// Exception associated with the task if it was canceled
-	std::exception_ptr except;
-
-	// Dispatch function with 3 operations:
-	// - Run the task function
-	// - Free the task function when canceling
-	// - Destroy the task function and result
-	void (*dispatch)(task_base*, dispatch_op);
+	// Virtual function table used for dynamic dispatch
+	const task_base_vtable* vtable;
 
 	// Use aligned memory allocation
 	static void* operator new(std::size_t size)
@@ -86,15 +90,16 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 	task_base()
 		: state(task_state::pending) {}
 
-	// Destroy task function and result in destructor
-	~task_base()
+	// Check whether the task is ready and include an acquire barrier if it is
+	bool ready() const
 	{
-		dispatch(this, dispatch_op::destroy);
+		return is_finished(state.load(std::memory_order_acquire));
 	}
 
-	// Run a single continuation
+	// Run a single continuation. See add_continuation for an explaination of
+	// the except parameter.
 	template<typename Sched>
-	void run_continuation(Sched& sched, task_ptr&& cont, bool cancel)
+	void run_continuation(Sched& sched, task_ptr&& cont, bool cancel, std::exception_ptr* except)
 	{
 		// Handle continuations that run even if the parent task is canceled
 		if (!cancel || cont->always_cont) {
@@ -102,25 +107,30 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 				detail::schedule_task(sched, std::move(cont));
 			} LIBASYNC_CATCH(...) {
 				// This is suboptimal, but better than letting the exception leak
-				cont->cancel(std::current_exception());
+				cont->vtable->cancel(cont.get(), std::current_exception());
 			}
 		} else
-			cont->cancel(except);
+			cont->vtable->cancel(cont.get(), std::exception_ptr(*except));
 	}
 
 	// Run all of the task's continuations after it has completed or canceled.
-	// The list of continuations is then emptied.
-	void run_continuations(bool cancel)
+	// The list of continuations is then emptied. See add_continuation for an
+	// explaination of the except parameter.
+	void run_continuations(bool cancel, std::exception_ptr* except)
 	{
-		continuations.flush_and_lock([this, cancel](task_ptr t) {
+		continuations.flush_and_lock([this, cancel, except](task_ptr t) {
 			scheduler_ref sched = t->sched;
-			run_continuation(sched, std::move(t), cancel);
+			run_continuation(sched, std::move(t), cancel, except);
 		});
 	}
 
-	// Add a continuation to this task
+	// Add a continuation to this task. The except parameter is a hack to
+	// support task_wait_handle::on_finish which does not have enough type
+	// information to call get_exception(). It should be set to the result of
+	// task_result::get_exception(), but can be set to nullptr if it is not
+	// used, such as when cont->always_cont is true.
 	template<typename Sched>
-	void add_continuation(Sched& sched, task_ptr cont)
+	void add_continuation(Sched& sched, task_ptr cont, std::exception_ptr* except)
 	{
 		// Check for task completion
 		task_state current_state = state.load(std::memory_order_relaxed);
@@ -133,37 +143,16 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 
 		// Otherwise run the continuation directly
 		std::atomic_thread_fence(std::memory_order_acquire);
-		run_continuation(sched, std::move(cont), current_state == task_state::canceled);
-	}
-
-	// Cancel the task with an exception
-	void cancel(std::exception_ptr cancel_exception)
-	{
-		// Destroy the function object in the task before canceling
-		dispatch(this, dispatch_op::cancel_hook);
-		cancel_base(std::move(cancel_exception));
-	}
-
-	// Cancel function to be used for tasks which don't have an associated
-	// function object (event_task).
-	void cancel_base(std::exception_ptr cancel_exception)
-	{
-		except = std::move(cancel_exception);
-		state.store(task_state::canceled, std::memory_order_release);
-		run_continuations(true);
+		run_continuation(sched, std::move(cont), current_state == task_state::canceled, except);
 	}
 
 	// Finish the task after it has been executed and the result set
 	void finish()
 	{
+		// We don't care about the exception_ptr parameter here because the task
+		// has completed successfully without an exception.
 		state.store(task_state::completed, std::memory_order_release);
-		run_continuations(false);
-	}
-
-	// Check whether the task is ready and include an acquire barrier if it is
-	bool ready() const
-	{
-		return is_finished(state.load(std::memory_order_acquire));
+		run_continuations(false, nullptr);
 	}
 
 	// Wait for the task to finish executing
@@ -176,30 +165,24 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base> {
 		}
 		return s;
 	}
+};
 
-	// Wait and throw the exception if the task was canceled
-	void wait_and_throw()
+// Deleter for task_ptr
+struct task_base_deleter {
+	static void do_delete(task_base* p)
 	{
-		if (wait() == task_state::canceled) {
-#ifdef LIBASYNC_NO_EXCEPTIONS
-			std::abort();
-#else
-			std::rethrow_exception(except);
-#endif
-		}
+		// Go through the vtable to delete p with its proper type
+		p->vtable->destroy(p);
 	}
 };
 
 // Result type-specific task object
 template<typename Result>
-struct task_result: public task_base {
-	typename std::aligned_storage<sizeof(Result), std::alignment_of<Result>::value>::type result;
-
-	// Set the dispatch function
-	task_result()
-	{
-		dispatch = cleanup;
-	}
+struct task_result_holder: public task_base {
+	union {
+		typename std::aligned_storage<sizeof(Result), std::alignment_of<Result>::value>::type result;
+		std::aligned_storage<sizeof(std::exception_ptr), std::alignment_of<std::exception_ptr>::value>::type except;
+	};
 
 	template<typename T>
 	void set_result(T&& t)
@@ -220,30 +203,23 @@ struct task_result: public task_base {
 		return *reinterpret_cast<Result*>(&result);
 	}
 
-	// Result-specific dispatch function
-	static void cleanup(task_base* t, dispatch_op op)
+	// Destroy the result
+	~task_result_holder()
 	{
-		// Only need to handle destruction here
-		if (op == dispatch_op::destroy) {
-			// Result is only present if the task completed successfully
-			task_result* current_task = static_cast<task_result*>(t);
-			if (current_task->state.load(std::memory_order_relaxed) == task_state::completed)
-				reinterpret_cast<Result*>(&current_task->result)->~Result();
-		}
+		// Result is only present if the task completed successfully
+		if (state.load(std::memory_order_relaxed) == task_state::completed)
+			reinterpret_cast<Result*>(&result)->~Result();
 	}
 };
 
 // Specialization for references
 template<typename Result>
-struct task_result<Result&>: public task_base {
-	// Store as pointer internally
-	Result* result;
-
-	// Set the dispatch function
-	task_result()
-	{
-		dispatch = cleanup;
-	}
+struct task_result_holder<Result&>: public task_base {
+	union {
+		// Store as pointer internally
+		Result* result;
+		std::aligned_storage<sizeof(std::exception_ptr), std::alignment_of<std::exception_ptr>::value>::type except;
+	};
 
 	void set_result(Result& obj)
 	{
@@ -260,21 +236,14 @@ struct task_result<Result&>: public task_base {
 	{
 		return *result;
 	}
-
-	// No cleanup required for references
-	static void cleanup(task_base*, dispatch_op) {}
 };
 
 // Specialization for void
 template<>
-struct task_result<fake_void>: public task_base {
-	void set_result(fake_void) {}
+struct task_result_holder<fake_void>: public task_base {
+	std::aligned_storage<sizeof(std::exception_ptr), std::alignment_of<std::exception_ptr>::value>::type except;
 
-	// Set the dispatch function
-	task_result()
-	{
-		dispatch = cleanup;
-	}
+	void set_result(fake_void) {}
 
 	// Get the result as fake_void so that it can be passed to set_result and
 	// continuations
@@ -288,9 +257,57 @@ struct task_result<fake_void>: public task_base {
 	{
 		return fake_void();
 	}
+};
 
-	// No cleanup required for void
-	static void cleanup(task_base*, dispatch_op) {}
+template<typename Result>
+struct task_result: public task_result_holder<Result> {
+	// Virtual function table for task_result
+	static const task_base_vtable vtable_impl;
+	task_result()
+	{
+		this->vtable = &vtable_impl;
+	}
+
+	// Destroy the exception
+	~task_result()
+	{
+		// Exception is only present if the task was canceled
+		if (this->state.load(std::memory_order_relaxed) == task_state::canceled)
+			reinterpret_cast<std::exception_ptr*>(&this->except)->~exception_ptr();
+	}
+
+	// Cancel a task with the given exception
+	void cancel_base(std::exception_ptr&& except)
+	{
+		new(&this->except) std::exception_ptr(std::move(except));
+		this->state.store(task_state::canceled, std::memory_order_release);
+		this->run_continuations(true, &get_exception());
+	}
+
+	// Get the exception a task was canceled with
+	std::exception_ptr& get_exception()
+	{
+		return *reinterpret_cast<std::exception_ptr*>(&this->except);
+	}
+
+	// Wait and throw the exception if the task was canceled
+	void wait_and_throw()
+	{
+		if (this->wait() == task_state::canceled)
+			LIBASYNC_RETHROW_EXCEPTION(get_exception());
+	}
+
+	// Delete the task using its proper type
+	static void destroy(task_base* t)
+	{
+		delete static_cast<task_result<Result>*>(t);;
+	}
+};
+template<typename Result>
+const task_base_vtable task_result<Result>::vtable_impl = {
+	task_result<Result>::destroy, // destroy
+	nullptr, // run
+	nullptr // cancel
 };
 
 // Class to hold a function object, with empty base class optimization
@@ -363,50 +380,55 @@ struct func_holder<Func, typename std::enable_if<std::is_empty<Func>::value>::ty
 // Using private inheritance so empty Func doesn't take up space
 template<typename Func, typename Result>
 struct task_func: public task_result<Result>, func_holder<Func> {
+	// Virtual function table for task_func
+	static const task_base_vtable vtable_impl;
 	template<typename... Args>
 	explicit task_func(Args&&... args)
 	{
+		this->vtable = &vtable_impl;
 		this->init_func(std::forward<Args>(args)...);
-		this->dispatch = dispatch_func;
 	}
 
-	// Dispatch function
-	static void dispatch_func(task_base* t, dispatch_op op)
+	// Run the stored function
+	static void run(task_base* t)
 	{
-		task_func* current_task = static_cast<task_func*>(t);
-		switch (op) {
-		case dispatch_op::execute:
-			LIBASYNC_TRY {
-				// Dispatch to execution function
-				current_task->get_func()(current_task);
-			} LIBASYNC_CATCH(...) {
-				current_task->cancel(std::current_exception());
-			}
-			break;
-
-		case dispatch_op::cancel_hook:
-			// Destroy the function object when canceling since it won't be
-			// used anymore.
-			current_task->destroy_func();
-			break;
-
-		case dispatch_op::destroy:
-			// If the task hasn't completed yet, destroy the function object.
-			if (current_task->state.load(std::memory_order_relaxed) == task_state::pending)
-				current_task->destroy_func();
-
-			// Then destroy the result
-			task_result<Result>::cleanup(t, dispatch_op::destroy);
-			break;
+		LIBASYNC_TRY {
+			// Dispatch to execution function
+			static_cast<task_func<Func, Result>*>(t)->get_func()(t);
+		} LIBASYNC_CATCH(...) {
+			cancel(t, std::current_exception());
 		}
 	}
 
-	// Overriden cancel which avoid dynamic dispatch overhead
-	void cancel(std::exception_ptr cancel_exception)
+	// Cancel the task
+	static void cancel(task_base* t, std::exception_ptr&& except)
 	{
-		this->destroy_func();
-		this->cancel_base(std::move(cancel_exception));
+		// Destroy the function object when canceling since it won't be
+		// used anymore.
+		static_cast<task_func<Func, Result>*>(t)->destroy_func();
+		static_cast<task_func<Func, Result>*>(t)->cancel_base(std::move(except));
 	}
+
+	// Free the function
+	~task_func()
+	{
+		// If the task hasn't completed yet, destroy the function object. Note
+		// that an unwrapped task has already destroyed its function object.
+		if (this->state.load(std::memory_order_relaxed) == task_state::pending)
+			this->destroy_func();
+	}
+
+	// Delete the task using its proper type
+	static void destroy(task_base* t)
+	{
+		delete static_cast<task_func<Func, Result>*>(t);
+	}
+};
+template<typename Func, typename Result>
+const task_base_vtable task_func<Func, Result>::vtable_impl = {
+	task_func<Func, Result>::destroy, // destroy
+	task_func<Func, Result>::run, // run
+	task_func<Func, Result>::cancel, // cancel
 };
 
 // Helper functions to access the internal_task member of a task object, which
@@ -424,25 +446,26 @@ void set_internal_task(Task& t, task_ptr p)
 }
 
 // Common code for task unwrapping
-template<typename Result, typename Func, typename Child>
+template<typename Result, typename Child>
 struct unwrapped_func {
 	explicit unwrapped_func(task_ptr t)
 		: parent_task(std::move(t)) {}
 	void operator()(Child child_task) const
 	{
 		// Forward completion state and result to parent task
+		task_result<Result>* parent = static_cast<task_result<Result>*>(parent_task.get());
 		LIBASYNC_TRY {
 			if (get_internal_task(child_task)->state.load(std::memory_order_relaxed) == task_state::completed) {
-				static_cast<task_result<Result>*>(parent_task.get())->set_result(get_internal_task(child_task)->get_result(child_task));
-				parent_task->finish();
+				parent->set_result(get_internal_task(child_task)->get_result(child_task));
+				parent->finish();
 			} else {
-				// We don't call the specialized cancel function here because
+				// We don't call the generic cancel function here because
 				// the function of the parent task has already been destroyed.
-				parent_task->cancel_base(get_internal_task(child_task)->except);
+				parent->cancel_base(std::exception_ptr(get_internal_task(child_task)->get_exception()));
 			}
 		} LIBASYNC_CATCH(...) {
 			// If the copy/move constructor of the result threw, propagate the exception
-			parent_task->cancel_base(std::current_exception());
+			parent->cancel_base(std::current_exception());
 		}
 	}
 	task_ptr parent_task;
@@ -450,13 +473,18 @@ struct unwrapped_func {
 template<typename Result, typename Func, typename Child>
 void unwrapped_finish(task_base* parent_base, Child child_task)
 {
-	// Save a reference to the parent in the continuation
-	parent_base->add_ref();
-	child_task.then(inline_scheduler(), unwrapped_func<Result, Func, Child>(task_ptr(parent_base)));
-
-	// Destroy the parent task's function since it has been executed. Note that
-	// this is after the then() call which can potentially throw.
+	// Destroy the parent task's function since it has been executed
+	parent_base->state.store(task_state::unwrapped, std::memory_order_relaxed);
 	static_cast<task_func<Func, Result>*>(parent_base)->destroy_func();
+
+	// Set up a continuation on the child to set the result of the parent
+	LIBASYNC_TRY {
+		parent_base->add_ref();
+		child_task.then(inline_scheduler(), unwrapped_func<Result, Child>(task_ptr(parent_base)));
+	} LIBASYNC_CATCH(...) {
+		// Use cancel_base here because the function object is already destroyed.
+		static_cast<task_result<Result>*>(parent_base)->cancel_base(std::current_exception());
+	}
 }
 
 // Execution functions for root tasks:
@@ -494,7 +522,7 @@ struct continuation_exec_func: private func_base<Func> {
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
-		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), std::move(this->parent)));
+		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), std::move(parent)));
 		static_cast<task_func<continuation_exec_func, Result>*>(t)->destroy_func();
 		t->finish();
 	}
@@ -507,8 +535,7 @@ struct continuation_exec_func<Parent, Result, Func, true, false>: private func_b
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
-		auto&& result = get_internal_task(parent)->get_result(parent);
-		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), std::forward<decltype(result)>(result)));
+		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), get_internal_task(parent)->get_result(parent)));
 		static_cast<task_func<continuation_exec_func, Result>*>(t)->destroy_func();
 		t->finish();
 	}
@@ -532,8 +559,7 @@ struct continuation_exec_func<Parent, Result, Func, true, true>: private func_ba
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
-		auto&& result = get_internal_task(parent)->get_result(parent);
-		unwrapped_finish<Result, continuation_exec_func>(t, invoke_fake_void(std::move(this->get_func()), std::forward<decltype(result)>(result)));
+		unwrapped_finish<Result, continuation_exec_func>(t, invoke_fake_void(std::move(this->get_func()), get_internal_task(parent)->get_result(parent)));
 	}
 	Parent parent;
 };
