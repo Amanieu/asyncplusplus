@@ -54,6 +54,9 @@ struct task_base: public ref_count_base<task_base> {
 	// Whether this task should be run even if the parent was canceled
 	bool always_cont;
 
+	// Whether get_task() was already called on an event_task
+	bool event_task_got_task;
+
 	// Vector of continuations
 	continuation_vector continuations;
 

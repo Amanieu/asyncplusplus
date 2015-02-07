@@ -212,7 +212,10 @@ public:
 
 	// Main constructor
 	basic_event()
-		: internal_task(new internal_task_type) {}
+		: internal_task(new internal_task_type)
+	{
+		internal_task->event_task_got_task = false;
+	}
 
 	// Cancel events if they are destroyed before they are set
 	~basic_event()
@@ -228,17 +231,24 @@ public:
 		}
 	}
 
-	// Get a task linked to this event
+	// Get the task linked to this event. This can only be called once.
 	task<Result> get_task() const
 	{
 #ifndef NDEBUG
 		// Catch use of uninitialized task objects
 		if (!internal_task)
 			LIBASYNC_THROW(std::invalid_argument("Use of empty event_task object"));
+
+		if (internal_task->event_task_got_task)
+			LIBASYNC_THROW(std::logic_error("get_task() called twice on event_task"));
 #endif
 
+		// Even if we didn't throw an exception, don't return a task if one has
+		// already been returned.
 		task<Result> out;
-		set_internal_task(out, internal_task);
+		if (!internal_task->event_task_got_task)
+			set_internal_task(out, internal_task);
+		internal_task->event_task_got_task = true;
 		return out;
 	}
 
