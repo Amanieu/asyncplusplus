@@ -91,7 +91,7 @@ class default_scheduler_impl: public threadpool_scheduler {
 		// MSVC gives an error when trying to use getenv, work around this
 		// by using _dupenv_s instead.
 		_dupenv_s(&s, nullptr, "LIBASYNC_NUM_THREADS");
-#endif
+# endif
 #else
 		const char *s = std::getenv("LIBASYNC_NUM_THREADS");
 #endif
@@ -99,6 +99,11 @@ class default_scheduler_impl: public threadpool_scheduler {
 			num_threads = std::strtoul(s, nullptr, 10);
 		else
 			num_threads = hardware_concurrency();
+
+#if defined(_MSC_VER) && !defined(__cplusplus_winrt)
+		// Free the string allocated by _dupenv_s
+		free(s);
+#endif
 
 		// Make sure the thread count is reasonable
 		if (num_threads < 1)
