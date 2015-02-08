@@ -25,7 +25,7 @@ namespace detail {
 LIBASYNC_EXPORT void* aligned_alloc(std::size_t size, std::size_t align);
 
 // Free an aligned block of memory
-LIBASYNC_EXPORT void aligned_free(void* addr);
+LIBASYNC_EXPORT void aligned_free(void* addr) LIBASYNC_NOEXCEPT;
 
 // Class representing an aligned array and its length
 template<typename T, std::size_t Align = std::alignment_of<T>::value>

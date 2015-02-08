@@ -86,7 +86,7 @@
 #if defined(__GNUC__) || _MSC_VER >= 1900
 # define LIBASYNC_NOEXCEPT noexcept
 #else
-# define LIBASYNC_NOEXCEPT
+# define LIBASYNC_NOEXCEPT throw()
 #endif
 
 // Cacheline alignment to avoid false sharing between different threads

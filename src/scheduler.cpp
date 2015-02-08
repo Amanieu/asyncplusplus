@@ -39,7 +39,7 @@ void* aligned_alloc(std::size_t size, std::size_t align)
 #endif
 }
 
-void aligned_free(void* addr)
+void aligned_free(void* addr) LIBASYNC_NOEXCEPT
 {
 #ifdef _WIN32
 	_aligned_free(addr);
@@ -164,7 +164,7 @@ void fifo_scheduler::run_all_tasks()
 	while (try_run_one_task()) {}
 }
 
-std::size_t hardware_concurrency()
+std::size_t hardware_concurrency() LIBASYNC_NOEXCEPT
 {
 	// Cache the value because calculating it may be expensive
 	static std::size_t value = std::thread::hardware_concurrency();
@@ -173,7 +173,7 @@ std::size_t hardware_concurrency()
 	return value == 0 ? 1 : value;
 }
 
-wait_handler set_thread_wait_handler(wait_handler handler)
+wait_handler set_thread_wait_handler(wait_handler handler) LIBASYNC_NOEXCEPT
 {
 	wait_handler old = detail::thread_wait_handler;
 	detail::thread_wait_handler = handler;

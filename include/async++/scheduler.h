@@ -27,7 +27,7 @@ namespace async {
 // Improved version of std::hardware_concurrency:
 // - It never returns 0, 1 is returned instead.
 // - It is guaranteed to remain constant for the duration of the program.
-LIBASYNC_EXPORT std::size_t hardware_concurrency();
+LIBASYNC_EXPORT std::size_t hardware_concurrency() LIBASYNC_NOEXCEPT;
 
 // Task handle used by a wait handler
 class task_wait_handle {
@@ -91,7 +91,7 @@ typedef void (*wait_handler)(task_wait_handle t);
 // is when it is waiting for another task to complete. The wait handler can do
 // other work, but should return when it detects that the task has completed.
 // The previously installed handler is returned.
-LIBASYNC_EXPORT wait_handler set_thread_wait_handler(wait_handler w);
+LIBASYNC_EXPORT wait_handler set_thread_wait_handler(wait_handler w) LIBASYNC_NOEXCEPT;
 
 // Task handle used in scheduler, acts as a unique_ptr to a task object
 class task_run_handle {
