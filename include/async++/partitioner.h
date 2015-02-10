@@ -160,13 +160,13 @@ detail::auto_partitioner_impl<decltype(std::begin(std::declval<Range>()))> auto_
 // Wrap a range in a partitioner. If the input is already a partitioner then it
 // is returned unchanged. This allows parallel algorithms to accept both ranges
 // and partitioners as parameters.
-template<typename Partitioner, typename std::enable_if<detail::is_partitioner<typename std::decay<Partitioner>::type>::value, int>::type = 0>
-Partitioner&& to_partitioner(Partitioner&& partitioner)
+template<typename Partitioner>
+typename std::enable_if<detail::is_partitioner<typename std::decay<Partitioner>::type>::value, Partitioner&&>::type to_partitioner(Partitioner&& partitioner)
 {
 	return std::forward<Partitioner>(partitioner);
 }
-template<typename Range, typename std::enable_if<!detail::is_partitioner<typename std::decay<Range>::type>::value, int>::type = 0>
-detail::auto_partitioner_impl<decltype(std::begin(std::declval<Range>()))> to_partitioner(Range&& range)
+template<typename Range>
+typename std::enable_if<!detail::is_partitioner<typename std::decay<Range>::type>::value, detail::auto_partitioner_impl<decltype(std::begin(std::declval<Range>()))>>::type to_partitioner(Range&& range)
 {
 	return async::auto_partitioner(std::forward<Range>(range));
 }

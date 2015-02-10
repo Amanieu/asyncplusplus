@@ -27,7 +27,7 @@ namespace detail {
 
 // Compress the flags in the low bits of the pointer if the structures are
 // suitably aligned. Fall back to a separate flags variable otherwise.
-template<std::uintptr_t Mask, bool Enable = false>
+template<std::uintptr_t Mask, bool Enable>
 class compressed_ptr {
 	void* ptr;
 	std::uintptr_t flags;
