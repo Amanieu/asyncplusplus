@@ -48,6 +48,9 @@ class scheduler_ref {
 	// Type-erased data
 	void* sched_ptr;
 	void (*sched_func)(void* sched, task_run_handle&& t);
+
+public:
+	// Scheduler invocation function
 	template<typename T>
 	static void invoke_sched(void* sched, task_run_handle&& t)
 	{
@@ -55,11 +58,9 @@ class scheduler_ref {
 		static_cast<T*>(sched)->schedule(std::move(t));
 	}
 
-public:
-	// Wrap the given scheduler type
-	scheduler_ref() = default;
-	template<typename T> explicit scheduler_ref(T& sched)
-		: sched_ptr(std::addressof(sched)), sched_func(invoke_sched<T>) {}
+	// Wrap a scheduler using the given invocation function
+	scheduler_ref(void* sched, void (*invoke)(void* sched, task_run_handle&& t))
+		: sched_ptr(sched), sched_func(invoke) {}
 
 	// Forward tasks to the wrapped scheduler
 	void schedule(task_run_handle&& t)

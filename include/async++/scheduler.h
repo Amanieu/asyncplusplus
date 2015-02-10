@@ -77,10 +77,8 @@ public:
 
 		// We are passing nullptr to add_continuation because it doesn't use
 		// the parent's exception for always_cont continuations.
-		detail::task_ptr cont(new detail::task_func<wait_exec_func<typename std::decay<Func>::type>, detail::fake_void>(std::forward<Func>(func)));
-		cont->sched = detail::scheduler_ref(inline_scheduler());
-		cont->always_cont = true;
-		handle->add_continuation(inline_scheduler(), std::move(cont), nullptr);
+		detail::task_ptr cont(new detail::task_func<typename std::remove_reference<decltype(inline_scheduler())>::type, wait_exec_func<typename std::decay<Func>::type>, detail::fake_void>(std::forward<Func>(func)));
+		handle->add_continuation(inline_scheduler(), std::move(cont), true, nullptr);
 	}
 };
 

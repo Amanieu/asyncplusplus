@@ -77,18 +77,14 @@ class basic_task {
 
 		// Create continuation
 		typedef typename void_to_fake_void<typename continuation_traits<Parent, Func>::task_type::result_type>::type cont_internal_result;
-		typedef continuation_exec_func<typename std::decay<Parent>::type, cont_internal_result, typename std::decay<Func>::type, continuation_traits<Parent, Func>::is_value_cont::value, is_task<typename continuation_traits<Parent, Func>::result_type>::value> exec_func;
+		typedef continuation_exec_func<Sched, typename std::decay<Parent>::type, cont_internal_result, typename std::decay<Func>::type, continuation_traits<Parent, Func>::is_value_cont::value, is_task<typename continuation_traits<Parent, Func>::result_type>::value> exec_func;
 		typename continuation_traits<Parent, Func>::task_type cont;
-		set_internal_task(cont, task_ptr(new task_func<exec_func, cont_internal_result>(std::forward<Func>(f), std::forward<Parent>(parent))));
-
-		// Set continuation parameters
-		get_internal_task(cont)->sched = scheduler_ref(sched);
-		get_internal_task(cont)->always_cont = !continuation_traits<Parent, Func>::is_value_cont::value;
+		set_internal_task(cont, task_ptr(new task_func<Sched, exec_func, cont_internal_result>(std::forward<Func>(f), std::forward<Parent>(parent))));
 
 		// Add the continuation to this task
 		// Avoid an expensive ref-count modification since the task isn't shared yet
 		get_internal_task(cont)->add_ref_unlocked();
-		my_internal->add_continuation(sched, task_ptr(get_internal_task(cont)), &static_cast<internal_task_type*>(my_internal)->get_exception());
+		my_internal->add_continuation(sched, task_ptr(get_internal_task(cont)), !continuation_traits<Parent, Func>::is_value_cont::value, &static_cast<internal_task_type*>(my_internal)->get_exception());
 
 		return cont;
 	}
@@ -430,7 +426,7 @@ public:
 };
 
 // Task type returned by local_spawn()
-template<typename Func>
+template<typename Sched, typename Func>
 class local_task {
 	// Make sure the function type is callable
 	static_assert(detail::is_callable<Func()>::value, "Invalid function type passed to local_spawn()");
@@ -440,20 +436,19 @@ class local_task {
 	typedef typename detail::void_to_fake_void<result_type>::type internal_result;
 
 	// Task execution function type
-	typedef detail::root_exec_func<internal_result, typename std::decay<Func>::type, detail::is_task<decltype(std::declval<Func>()())>::value> exec_func;
+	typedef detail::root_exec_func<Sched, internal_result, typename std::decay<Func>::type, detail::is_task<decltype(std::declval<Func>()())>::value> exec_func;
 
 	// Task object embedded directly. The ref-count is initialized to 1 so it
 	// will never be freed using delete, only when the local_task is destroyed.
-	detail::task_func<exec_func, internal_result> internal_task;
+	detail::task_func<Sched, exec_func, internal_result> internal_task;
 
 	// Friend access for local_spawn
 	template<typename S, typename F>
-	friend local_task<F> local_spawn(S& sched, F&& f);
+	friend local_task<S, F> local_spawn(S& sched, F&& f);
 	template<typename F>
-	friend local_task<F> local_spawn(F&& f);
+	friend local_task<typename std::remove_reference<decltype(::async::default_scheduler())>::type, F> local_spawn(F&& f);
 
 	// Constructor, used by local_spawn
-	template<typename Sched>
 	local_task(Sched& sched, Func&& f)
 		: internal_task(std::forward<Func>(f))
 	{
@@ -522,9 +517,9 @@ task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> spawn
 
 	// Create task
 	typedef typename detail::void_to_fake_void<typename detail::remove_task<decltype(std::declval<Func>()())>::type>::type internal_result;
-	typedef detail::root_exec_func<internal_result, typename std::decay<Func>::type, detail::is_task<decltype(std::declval<Func>()())>::value> exec_func;
+	typedef detail::root_exec_func<Sched, internal_result, typename std::decay<Func>::type, detail::is_task<decltype(std::declval<Func>()())>::value> exec_func;
 	task<typename detail::remove_task<decltype(std::declval<Func>()())>::type> out;
-	detail::set_internal_task(out, detail::task_ptr(new detail::task_func<exec_func, internal_result>(std::forward<Func>(f))));
+	detail::set_internal_task(out, detail::task_ptr(new detail::task_func<Sched, exec_func, internal_result>(std::forward<Func>(f))));
 
 	// Avoid an expensive ref-count modification since the task isn't shared yet
 	detail::get_internal_task(out)->add_ref_unlocked();
@@ -568,7 +563,7 @@ template<typename Sched, typename Func>
 #ifdef __GNUC__
 __attribute__((warn_unused_result))
 #endif
-local_task<Func> local_spawn(Sched& sched, Func&& f)
+local_task<Sched, Func> local_spawn(Sched& sched, Func&& f)
 {
 	// Since local_task is not movable, we construct it in-place and let the
 	// caller extend the lifetime of the returned object using a reference.
@@ -578,7 +573,7 @@ template<typename Func>
 #ifdef __GNUC__
 __attribute__((warn_unused_result))
 #endif
-local_task<Func> local_spawn(Func&& f)
+local_task<typename std::remove_reference<decltype(::async::default_scheduler())>::type, Func> local_spawn(Func&& f)
 {
 	return {::async::default_scheduler(), std::forward<Func>(f)};
 }
