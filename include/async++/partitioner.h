@@ -166,7 +166,7 @@ Partitioner&& to_partitioner(Partitioner&& partitioner)
 	return std::forward<Partitioner>(partitioner);
 }
 template<typename Range, typename std::enable_if<!detail::is_partitioner<typename std::decay<Range>::type>::value, int>::type = 0>
-decltype(async::auto_partitioner(std::declval<Range>())) to_partitioner(Range&& range)
+detail::auto_partitioner_impl<decltype(std::begin(std::declval<Range>()))> to_partitioner(Range&& range)
 {
 	return async::auto_partitioner(std::forward<Range>(range));
 }
@@ -175,17 +175,17 @@ decltype(async::auto_partitioner(std::declval<Range>())) to_partitioner(Range&& 
 template<typename T>
 detail::static_partitioner_impl<decltype(std::declval<std::initializer_list<T>>().begin())> static_partitioner(std::initializer_list<T> range)
 {
-	return static_partitioner(async::make_range(range.begin(), range.end()));
+	return async::static_partitioner(async::make_range(range.begin(), range.end()));
 }
 template<typename T>
 detail::static_partitioner_impl<decltype(std::declval<std::initializer_list<T>>().begin())> static_partitioner(std::initializer_list<T> range, std::size_t grain)
 {
-	return static_partitioner(async::make_range(range.begin(), range.end()), grain);
+	return async::static_partitioner(async::make_range(range.begin(), range.end()), grain);
 }
 template<typename T>
 detail::auto_partitioner_impl<decltype(std::declval<std::initializer_list<T>>().begin())> auto_partitioner(std::initializer_list<T> range)
 {
-	return auto_partitioner(async::make_range(range.begin(), range.end()));
+	return async::auto_partitioner(async::make_range(range.begin(), range.end()));
 }
 template<typename T>
 detail::auto_partitioner_impl<decltype(std::declval<std::initializer_list<T>>().begin())> to_partitioner(std::initializer_list<T> range)

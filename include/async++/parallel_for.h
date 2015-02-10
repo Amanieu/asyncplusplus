@@ -23,13 +23,14 @@
 #endif
 
 namespace async {
+namespace detail {
 
-// Run a function for each element in a range
-template<typename Sched, typename Range, typename Func>
-void parallel_for(Sched& sched, Range&& range, const Func& func)
+// Internal implementation of parallel_for that only accepts a partitioner
+// argument.
+template<typename Sched, typename Partitioner, typename Func>
+void internal_parallel_for(Sched& sched, Partitioner partitioner, const Func& func)
 {
 	// Split the partition, run inline if no more splits are possible
-	auto partitioner = async::to_partitioner(std::forward<Range>(range));
 	auto subpart = partitioner.split();
 	if (subpart.begin() == subpart.end()) {
 		for (auto&& i: partitioner)
@@ -38,11 +39,20 @@ void parallel_for(Sched& sched, Range&& range, const Func& func)
 	}
 
 	// Run the function over each half in parallel
-	auto&& t = async::local_spawn(sched, [&sched, subpart, &func] {
-		async::parallel_for(sched, subpart, func);
+	auto&& t = async::local_spawn(sched, [&sched, &subpart, &func] {
+		detail::internal_parallel_for(sched, std::move(subpart), func);
 	});
-	async::parallel_for(sched, partitioner, func);
+	detail::internal_parallel_for(sched, std::move(partitioner), func);
 	t.get();
+}
+
+} // namespace detail
+
+// Run a function for each element in a range
+template<typename Sched, typename Range, typename Func>
+void parallel_for(Sched& sched, Range&& range, const Func& func)
+{
+	detail::internal_parallel_for(sched, async::to_partitioner(std::forward<Range>(range)), func);
 }
 
 // Overload with default scheduler
