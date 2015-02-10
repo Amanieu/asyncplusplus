@@ -126,10 +126,11 @@ template<typename Func, typename Parent>
 void is_value_cont_helper(Func&&, const Parent&, ...);
 template<typename Parent, typename Func>
 struct continuation_traits {
-	typedef decltype(is_value_cont_helper(std::declval<Func>(), std::declval<Parent>(), 0, 0)) is_value_cont;
+	typedef typename std::decay<Func>::type decay_func;
+	typedef decltype(is_value_cont_helper(std::declval<decay_func>(), std::declval<Parent>(), 0, 0)) is_value_cont;
 	static_assert(!std::is_void<is_value_cont>::value, "Parameter type for continuation function is invalid for parent task type");
 	typedef typename std::conditional<is_value_cont::value, typename void_to_fake_void<decltype(std::declval<Parent>().get())>::type, Parent>::type param_type;
-	typedef decltype(fake_void_to_void(invoke_fake_void(std::declval<Func>(), std::declval<param_type>()))) result_type;
+	typedef decltype(fake_void_to_void(invoke_fake_void(std::declval<decay_func>(), std::declval<param_type>()))) result_type;
 	typedef task<typename remove_task<result_type>::type> task_type;
 };
 
