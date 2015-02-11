@@ -188,7 +188,7 @@ public:
 	~basic_event()
 	{
 		// This check isn't thread-safe but set_exception does a proper check
-		if (internal_task && !internal_task->ready() && !internal_task->is_unique_ref()) {
+		if (internal_task && !internal_task->ready() && !internal_task->is_unique_ref(std::memory_order_relaxed)) {
 #ifdef LIBASYNC_NO_EXCEPTIONS
 			// This will result in an abort if the task result is read
 			set_exception(std::exception_ptr());
@@ -425,7 +425,7 @@ public:
 
 		// Now spin until the reference count drops to 1, since the scheduler
 		// may still have a reference to the task.
-		while (!internal_task.is_unique_ref())
+		while (!internal_task.is_unique_ref(std::memory_order_acquire))
 			std::this_thread::yield();
 	}
 

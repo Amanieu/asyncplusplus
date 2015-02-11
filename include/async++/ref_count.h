@@ -58,9 +58,9 @@ struct ref_count_base {
 	{
 		ref_count.store(ref_count.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
 	}
-	bool is_unique_ref()
+	bool is_unique_ref(std::memory_order order)
 	{
-		return ref_count.load(std::memory_order_relaxed) == 1;
+		return ref_count.load(order) == 1;
 	}
 };
 
