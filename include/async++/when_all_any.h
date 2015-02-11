@@ -239,11 +239,8 @@ task<typename detail::when_any_state<typename std::iterator_traits<Iter>::value_
 	typedef typename std::iterator_traits<Iter>::value_type task_type;
 	typedef typename task_type::result_type result_type;
 
-#ifndef NDEBUG
-	// Handle empty range
-	if (begin == end)
-		LIBASYNC_THROW(std::invalid_argument("when_any called with empty range"));
-#endif
+	// Disallow empty ranges
+	LIBASYNC_ASSERT(begin != end, std::invalid_argument, "when_any called with empty range");
 
 	// Create shared state
 	auto* state_ptr = new detail::when_any_state<result_type>(std::distance(begin, end));

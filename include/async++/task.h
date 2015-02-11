@@ -52,11 +52,7 @@ class basic_task {
 	// Common code for get()
 	void get_internal() const
 	{
-#ifndef NDEBUG
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
-#endif
+		LIBASYNC_ASSERT(internal_task, std::invalid_argument, "Use of empty task object");
 
 		// If the task was canceled, throw the associated exception
 		get_internal_task(*this)->wait_and_throw();
@@ -66,11 +62,7 @@ class basic_task {
 	template<typename Sched, typename Func, typename Parent>
 	typename continuation_traits<Parent, Func>::task_type then_internal(Sched& sched, Func&& f, Parent&& parent) const
 	{
-#ifndef NDEBUG
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
-#endif
+		LIBASYNC_ASSERT(internal_task, std::invalid_argument, "Use of empty task object");
 
 		// Save a copy of internal_task because it might get moved into exec_func
 		task_base* my_internal = internal_task.get();
@@ -103,48 +95,28 @@ public:
 	// Query whether the task has finished executing
 	bool ready() const
 	{
-#ifndef NDEBUG
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
-#endif
-
+		LIBASYNC_ASSERT(internal_task, std::invalid_argument, "Use of empty task object");
 		return internal_task->ready();
 	}
 
 	// Query whether the task has been canceled with an exception
 	bool canceled() const
 	{
-#ifndef NDEBUG
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
-#endif
-
+		LIBASYNC_ASSERT(internal_task, std::invalid_argument, "Use of empty task object");
 		return internal_task->state.load(std::memory_order_acquire) == task_state::canceled;
 	}
 
 	// Wait for the task to complete
 	void wait() const
 	{
-#ifndef NDEBUG
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
-#endif
-
+		LIBASYNC_ASSERT(internal_task, std::invalid_argument, "Use of empty task object");
 		internal_task->wait();
 	}
 
 	// Get the exception associated with a canceled task
 	std::exception_ptr get_exception() const
 	{
-#ifndef NDEBUG
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
-#endif
-
+		LIBASYNC_ASSERT(internal_task, std::invalid_argument, "Use of empty task object");
 		if (internal_task->wait() == task_state::canceled)
 			return get_internal_task(*this)->get_exception();
 		else
@@ -173,11 +145,7 @@ class basic_event {
 	template<typename T>
 	bool set_internal(T&& result) const
 	{
-#ifndef NDEBUG
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			LIBASYNC_THROW(std::invalid_argument("Use of empty event_task object"));
-#endif
+		LIBASYNC_ASSERT(internal_task, std::invalid_argument, "Use of empty event_task object");
 
 		// Only allow setting the value once
 		detail::task_state expected = detail::task_state::pending;
@@ -233,16 +201,10 @@ public:
 	// Get the task linked to this event. This can only be called once.
 	task<Result> get_task()
 	{
-#ifndef NDEBUG
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			LIBASYNC_THROW(std::invalid_argument("Use of empty event_task object"));
+		LIBASYNC_ASSERT(internal_task, std::invalid_argument, "Use of empty event_task object");
+		LIBASYNC_ASSERT(!internal_task->event_task_got_task, std::logic_error, "get_task() called twice on event_task");
 
-		if (internal_task->event_task_got_task)
-			LIBASYNC_THROW(std::logic_error("get_task() called twice on event_task"));
-#endif
-
-		// Even if we didn't throw an exception, don't return a task if one has
+		// Even if we didn't trigger an assert, don't return a task if one has
 		// already been returned.
 		task<Result> out;
 		if (!internal_task->event_task_got_task)
@@ -254,11 +216,7 @@ public:
 	// Cancel the event with an exception and cancel continuations
 	bool set_exception(std::exception_ptr except) const
 	{
-#ifndef NDEBUG
-		// Catch use of uninitialized task objects
-		if (!internal_task)
-			LIBASYNC_THROW(std::invalid_argument("Use of empty event_task object"));
-#endif
+		LIBASYNC_ASSERT(internal_task, std::invalid_argument, "Use of empty event_task object");
 
 		// Only allow setting the value once
 		detail::task_state expected = detail::task_state::pending;
@@ -312,11 +270,7 @@ public:
 	// Create a shared_task from this task
 	shared_task<Result> share()
 	{
-#ifndef NDEBUG
-		// Catch use of uninitialized task objects
-		if (!this->internal_task)
-			LIBASYNC_THROW(std::invalid_argument("Use of empty task object"));
-#endif
+		LIBASYNC_ASSERT(this->internal_task, std::invalid_argument, "Use of empty task object");
 
 		shared_task<Result> out;
 		detail::set_internal_task(out, std::move(this->internal_task));

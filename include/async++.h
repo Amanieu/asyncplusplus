@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -69,7 +70,7 @@
 #ifdef LIBASYNC_NO_EXCEPTIONS
 # define LIBASYNC_THROW(...) std::abort()
 # define LIBASYNC_RETHROW() do {} while (false)
-# define LIBASYNC_RETHROW_EXCEPTION(except) std::abort()
+# define LIBASYNC_RETHROW_EXCEPTION(except) std::terminate()
 # define LIBASYNC_TRY if (true)
 # define LIBASYNC_CATCH(...) else if (false)
 #else
@@ -78,6 +79,18 @@
 # define LIBASYNC_RETHROW_EXCEPTION(except) std::rethrow_exception(except)
 # define LIBASYNC_TRY try
 # define LIBASYNC_CATCH(...) catch (__VA_ARGS__)
+#endif
+
+// Optional debug assertions. If exceptions are enabled then use those, but
+// otherwise fall back to an assert message.
+#ifndef NDEBUG
+# ifndef LIBASYNC_NO_EXCEPTIONS
+#  define LIBASYNC_ASSERT(pred, except, message) ((pred) ? ((void)0) : throw except(message))
+# else
+#  define LIBASYNC_ASSERT(pred, except, message) ((pred) ? ((void)0) : assert(message))
+# endif
+#else
+# define LIBASYNC_ASSERT(pred, except, message) ((void)0)
 #endif
 
 // Annotate move constructors and move assignment with noexcept to allow objects
