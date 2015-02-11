@@ -402,7 +402,7 @@ class local_task {
 	template<typename S, typename F>
 	friend local_task<S, F> local_spawn(S& sched, F&& f);
 	template<typename F>
-	friend local_task<typename std::remove_reference<decltype(::async::default_scheduler())>::type, F> local_spawn(F&& f);
+	friend local_task<detail::default_scheduler_type, F> local_spawn(F&& f);
 
 	// Constructor, used by local_spawn
 	local_task(Sched& sched, Func&& f)
@@ -466,8 +466,11 @@ public:
 
 // Spawn a function asynchronously
 template<typename Sched, typename Func>
-task<typename detail::remove_task<decltype(std::declval<typename std::decay<Func>::type>()())>::type> spawn(Sched& sched, Func&& f)
+task<typename detail::remove_task<typename std::result_of<typename std::decay<Func>::type()>::type>::type> spawn(Sched& sched, Func&& f)
 {
+	// Using result_of in the function return type to work around bugs in the Intel
+	// C++ compiler.
+
 	// Make sure the function type is callable
 	typedef typename std::decay<Func>::type decay_func;
 	static_assert(detail::is_callable<decay_func()>::value, "Invalid function type passed to spawn()");
@@ -530,7 +533,7 @@ template<typename Func>
 #ifdef __GNUC__
 __attribute__((warn_unused_result))
 #endif
-local_task<typename std::remove_reference<decltype(::async::default_scheduler())>::type, Func> local_spawn(Func&& f)
+local_task<detail::default_scheduler_type, Func> local_spawn(Func&& f)
 {
 	return {::async::default_scheduler(), std::forward<Func>(f)};
 }

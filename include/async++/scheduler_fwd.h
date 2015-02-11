@@ -164,4 +164,10 @@ public:
 	LIBASYNC_EXPORT void schedule(task_run_handle t);
 };
 
+namespace detail {
+
+// Work-around for Intel compiler handling decltype poorly in function returns
+typedef std::remove_reference<decltype(::async::default_scheduler())>::type default_scheduler_type;
+
+} // namespace detail
 } // namespace async
