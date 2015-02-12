@@ -79,9 +79,6 @@ public:
 	static void schedule(task_run_handle t);
 };
 
-// Actual implementation of default_scheduler if it is not overriden
-LIBASYNC_EXPORT threadpool_scheduler& internal_default_scheduler();
-
 // Reference counted pointer to task data
 struct task_base;
 typedef ref_count_ptr<task_base> task_ptr;
@@ -115,15 +112,20 @@ inline detail::thread_scheduler_impl& thread_scheduler()
 	return instance;
 }
 
-// If LIBASYNC_CUSTOM_DEFAULT_SCHEDULER is defined then async::default_scheduler
-// is left undefined and should be defined by the user. Otherwise the default
-// scheduler is a threadpool with a size that is configurable from
-// environment variables. Keep in mind that in order to work,
-// async::default_scheduler should be declared before including async++.h.
+// Built-in thread pool scheduler with a size that is configurable from the
+// LIBASYNC_NUM_THREADS environment variable. If that variable does not exist
+// then the number of CPUs in the system is used instead.
+LIBASYNC_EXPORT threadpool_scheduler& default_threadpool_scheduler();
+
+// Default scheduler that is used when one isn't specified. This defaults to
+// default_threadpool_scheduler(), but can be overriden by defining
+// LIBASYNC_CUSTOM_DEFAULT_SCHEDULER before including async++.h. Keep in mind
+// that in that case async::default_scheduler should be declared before
+// including async++.h.
 #ifndef LIBASYNC_CUSTOM_DEFAULT_SCHEDULER
 inline threadpool_scheduler& default_scheduler()
 {
-	return detail::internal_default_scheduler();
+	return default_threadpool_scheduler();
 }
 #endif
 

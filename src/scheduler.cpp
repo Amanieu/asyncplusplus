@@ -116,11 +116,6 @@ public:
 		: threadpool_scheduler(get_num_threads()) {}
 };
 
-threadpool_scheduler& internal_default_scheduler()
-{
-	return singleton<default_scheduler_impl>::get_instance();
-}
-
 // Thread scheduler implementation
 void thread_scheduler_impl::schedule(task_run_handle t)
 {
@@ -132,6 +127,11 @@ void thread_scheduler_impl::schedule(task_run_handle t)
 }
 
 } // namespace detail
+
+threadpool_scheduler& default_threadpool_scheduler()
+{
+	return detail::singleton<detail::default_scheduler_impl>::get_instance();
+}
 
 // FIFO scheduler implementation
 struct fifo_scheduler::internal_data {
