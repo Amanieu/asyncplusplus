@@ -108,7 +108,10 @@ public:
 	}
 	ref_count_ptr& operator=(ref_count_ptr&& other) LIBASYNC_NOEXCEPT
 	{
-		std::swap(p, other.p);
+		if (p)
+			p->remove_ref();
+		p = other.p;
+		other.p = nullptr;
 		return *this;
 	}
 	~ref_count_ptr()

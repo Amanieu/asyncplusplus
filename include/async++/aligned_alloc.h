@@ -60,6 +60,7 @@ public:
 	}
 	aligned_array& operator=(aligned_array&& other) LIBASYNC_NOEXCEPT
 	{
+		aligned_array(std::move(*this));
 		std::swap(ptr, other.ptr);
 		std::swap(length, other.length);
 		return *this;

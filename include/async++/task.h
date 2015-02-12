@@ -173,7 +173,7 @@ public:
 		: internal_task(std::move(other.internal_task)) {}
 	basic_event& operator=(basic_event&& other) LIBASYNC_NOEXCEPT
 	{
-		std::swap(internal_task, other.internal_task);
+		internal_task = std::move(other.internal_task);
 		return *this;
 	}
 

@@ -108,7 +108,7 @@ public:
 		: handle(std::move(other.handle)) {}
 	task_run_handle& operator=(task_run_handle&& other) LIBASYNC_NOEXCEPT
 	{
-		std::swap(handle, other.handle);
+		handle = std::move(other.handle);
 		return *this;
 	}
 
