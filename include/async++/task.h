@@ -505,6 +505,17 @@ task<typename std::decay<T>::type> make_task(T&& value)
 
 	return out;
 }
+template<typename T>
+task<T&> make_task(std::reference_wrapper<T> value)
+{
+	task<T&> out;
+
+	detail::set_internal_task(out, detail::task_ptr(new detail::task_result<T&>));
+	detail::get_internal_task(out)->set_result(value.get());
+	detail::get_internal_task(out)->state.store(detail::task_state::completed, std::memory_order_relaxed);
+
+	return out;
+}
 inline task<void> make_task()
 {
 	task<void> out;
