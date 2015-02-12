@@ -285,9 +285,15 @@ struct task_result: public task_result_holder<Result> {
 	// Cancel a task with the given exception
 	void cancel_base(std::exception_ptr&& except)
 	{
-		new(&this->except) std::exception_ptr(std::move(except));
+		set_exception(std::move(except));
 		this->state.store(task_state::canceled, std::memory_order_release);
 		this->run_continuations(true, &get_exception());
+	}
+
+	// Set the exception value of the task
+	void set_exception(std::exception_ptr&& except)
+	{
+		new(&this->except) std::exception_ptr(std::move(except));
 	}
 
 	// Get the exception a task was canceled with

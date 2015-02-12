@@ -526,6 +526,19 @@ inline task<void> make_task()
 	return out;
 }
 
+// Create a canceled task containing an exception
+template<typename T>
+task<T> make_exception_task(std::exception_ptr except)
+{
+	task<T> out;
+
+	detail::set_internal_task(out, detail::task_ptr(new detail::task_result<typename detail::void_to_fake_void<T>::type>));
+	detail::get_internal_task(out)->set_exception(std::move(except));
+	detail::get_internal_task(out)->state.store(detail::task_state::canceled, std::memory_order_relaxed);
+
+	return out;
+}
+
 // Spawn a very limited task which is restricted to the current function and
 // joins on destruction. Because local_task is not movable, the result must
 // be captured in a reference, like this:
