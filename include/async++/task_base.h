@@ -46,13 +46,13 @@ inline bool is_finished(task_state s)
 // generated code size.
 struct task_base_vtable {
 	// Destroy the function and result
-	void (*destroy)(task_base*);
+	void (*destroy)(task_base*) LIBASYNC_NOEXCEPT;
 
 	// Run the associated function
-	void (*run)(task_base*);
+	void (*run)(task_base*) LIBASYNC_NOEXCEPT;
 
 	// Cancel the task with an exception
-	void (*cancel)(task_base*, std::exception_ptr&&);
+	void (*cancel)(task_base*, std::exception_ptr&&) LIBASYNC_NOEXCEPT;
 
 	// Schedule the task using its scheduler
 	void (*schedule)(void* sched, task_run_handle&& t);
@@ -310,7 +310,7 @@ struct task_result: public task_result_holder<Result> {
 	}
 
 	// Delete the task using its proper type
-	static void destroy(task_base* t)
+	static void destroy(task_base* t) LIBASYNC_NOEXCEPT
 	{
 		delete static_cast<task_result<Result>*>(t);;
 	}
@@ -403,7 +403,7 @@ struct task_func: public task_result<Result>, func_holder<Func> {
 	}
 
 	// Run the stored function
-	static void run(task_base* t)
+	static void run(task_base* t) LIBASYNC_NOEXCEPT
 	{
 		LIBASYNC_TRY {
 			// Dispatch to execution function
@@ -414,7 +414,7 @@ struct task_func: public task_result<Result>, func_holder<Func> {
 	}
 
 	// Cancel the task
-	static void cancel(task_base* t, std::exception_ptr&& except)
+	static void cancel(task_base* t, std::exception_ptr&& except) LIBASYNC_NOEXCEPT
 	{
 		// Destroy the function object when canceling since it won't be
 		// used anymore.
@@ -432,7 +432,7 @@ struct task_func: public task_result<Result>, func_holder<Func> {
 	}
 
 	// Delete the task using its proper type
-	static void destroy(task_base* t)
+	static void destroy(task_base* t) LIBASYNC_NOEXCEPT
 	{
 		delete static_cast<task_func<Sched, Func, Result>*>(t);
 	}
