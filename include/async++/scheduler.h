@@ -91,6 +91,9 @@ typedef void (*wait_handler)(task_wait_handle t);
 // The previously installed handler is returned.
 LIBASYNC_EXPORT wait_handler set_thread_wait_handler(wait_handler w) LIBASYNC_NOEXCEPT;
 
+// Exception thrown if a task_run_handle is destroyed without being run
+struct LIBASYNC_EXPORT_EXCEPTION task_not_executed {};
+
 // Task handle used in scheduler, acts as a unique_ptr to a task object
 class task_run_handle {
 	detail::task_ptr handle;
@@ -110,6 +113,13 @@ public:
 	{
 		handle = std::move(other.handle);
 		return *this;
+	}
+
+	// If the task is not executed, cancel it with an exception
+	~task_run_handle()
+	{
+		if (handle)
+			handle->vtable->cancel(handle.get(), std::make_exception_ptr(task_not_executed()));
 	}
 
 	// Check if the handle is valid
