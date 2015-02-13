@@ -23,208 +23,174 @@
 #endif
 
 namespace async {
+
+// Result type for when_any
+template<typename Result>
+struct when_any_result {
+	// Index of the task that finished first
+	std::size_t index;
+
+	// List of tasks that were passed in
+	Result tasks;
+};
+
 namespace detail {
 
-// when_all shared state for ranges
-template<typename T>
-struct when_all_state_range: public ref_count_base<when_all_state_range<T>> {
-	typedef std::vector<T> task_type;
-	event_task<task_type> event;
-	task_type results;
+// Shared state for when_all
+template<typename Result>
+struct when_all_state: public ref_count_base<when_all_state<Result>> {
+	event_task<Result> event;
+	Result result;
 
-	when_all_state_range(std::size_t count)
-		: ref_count_base<when_all_state_range<T>>(count), results(count) {}
-
-	// When all references are dropped, signal the event
-	~when_all_state_range()
-	{
-		event.set(std::move(results));
-	}
-
-	template<typename U>
-	void set(std::size_t i, U&& u)
-	{
-		results[i] = std::forward<U>(u);
-	}
-
-	static task<task_type> empty_range()
-	{
-		return async::make_task(task_type());
-	}
-};
-template<>
-struct when_all_state_range<void>: public ref_count_base<when_all_state_range<void>> {
-	typedef void task_type;
-	event_task<void> event;
-
-	when_all_state_range(std::size_t count)
-		: ref_count_base(count) {}
+	when_all_state(std::size_t count)
+		: ref_count_base<when_all_state<Result>>(count) {}
 
 	// When all references are dropped, signal the event
-	~when_all_state_range()
+	~when_all_state()
 	{
-		event.set();
-	}
-
-	void set(std::size_t, fake_void) {}
-
-	static task<task_type> empty_range()
-	{
-		return make_task();
+		event.set(std::move(result));
 	}
 };
 
-// when_all shared state for varidic arguments
-template<typename Tuple>
-struct when_all_state_variadic: public ref_count_base<when_all_state_variadic<Tuple>> {
-	event_task<Tuple> event;
-	Tuple results;
+// Execution functions for when_all, for ranges and tuples
+template<typename Task, typename Result>
+struct when_all_func_range {
+	std::size_t index;
+	ref_count_ptr<when_all_state<Result>> state;
 
-	when_all_state_variadic()
-		: ref_count_base<when_all_state_variadic<Tuple>>(std::tuple_size<Tuple>::value) {}
+	when_all_func_range(std::size_t index, ref_count_ptr<when_all_state<Result>> state)
+		: index(index), state(std::move(state)) {}
 
-	// When all references are dropped, signal the event
-	~when_all_state_variadic()
+	// Copy the completed task object to the shared state. The event is
+	// automatically signaled when all references are dropped.
+	void operator()(Task t) const
 	{
-		// Catch any potential exceptions from a move constructor
-		LIBASYNC_TRY {
-			event.set(std::move(results));
-		} LIBASYNC_CATCH(...) {
-			event.set_exception(std::current_exception());
-		}
+		state->result[index] = std::move(t);
+	}
+};
+template<std::size_t index, typename Task, typename Result>
+struct when_all_func_tuple {
+	ref_count_ptr<when_all_state<Result>> state;
+
+	when_all_func_tuple(ref_count_ptr<when_all_state<Result>> state)
+		: state(std::move(state)) {}
+
+	// Copy the completed task object to the shared state. The event is
+	// automatically signaled when all references are dropped.
+	void operator()(Task t) const
+	{
+		std::get<index>(state->result) = std::move(t);
 	}
 };
 
-// when_any shared state
-template<typename T>
-struct when_any_state: public ref_count_base<when_any_state<T>> {
-	typedef std::pair<std::size_t, T> task_type;
-	event_task<task_type> event;
+// Shared state for when_any
+template<typename Result>
+struct when_any_state: public ref_count_base<when_any_state<Result>> {
+	event_task<when_any_result<Result>> event;
+	Result result;
 
 	when_any_state(std::size_t count)
-		: ref_count_base<when_any_state<T>>(count) {}
+		: ref_count_base<when_any_state<Result>>(count) {}
 
-	template<typename U>
-	void set(std::size_t i, U&& u)
+	// Signal the event when the first task reaches here
+	void set(std::size_t i)
 	{
-		event.set(std::make_pair(i, std::forward<U>(u)));
+		event.set({i, std::move(result)});
 	}
 };
-template<>
-struct when_any_state<void>: public ref_count_base<when_any_state<void>> {
-	typedef std::size_t task_type;
-	event_task<task_type> event;
 
-	when_any_state(std::size_t count)
-		: ref_count_base(count) {}
+// Execution function for when_any
+template<typename Task, typename Result>
+struct when_any_func {
+	std::size_t index;
+	ref_count_ptr<when_any_state<Result>> state;
 
-	void set(std::size_t i, fake_void)
+	when_any_func(std::size_t index, ref_count_ptr<when_any_state<Result>> state)
+		: index(index), state(std::move(state)) {}
+
+	// Simply tell the state that our task has finished, it already has a copy
+	// of the task object.
+	void operator()(Task) const
 	{
-		event.set(i);
+		state->set(index);
 	}
 };
 
 // Internal implementation of when_all for variadic arguments
-template<std::size_t index, typename State>
-void when_all_variadic(when_all_state_variadic<State>*) {}
-template<std::size_t index, typename State, typename First, typename... T>
-void when_all_variadic(when_all_state_variadic<State>* state_ptr, First&& first, T&&... tasks)
+template<std::size_t index, typename Result>
+void when_all_variadic(when_all_state<Result>*) {}
+template<std::size_t index, typename Result, typename First, typename... T>
+void when_all_variadic(when_all_state<Result>* state, First&& first, T&&... tasks)
 {
+	typedef typename std::decay<First>::type task_type;
+
 	// Add a continuation to the task
 	LIBASYNC_TRY {
-		first.then(inline_scheduler(), [state_ptr](typename std::decay<First>::type t) {
-			detail::ref_count_ptr<when_all_state_variadic<State>> state(state_ptr);
-			LIBASYNC_TRY {
-				if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
-					std::get<index>(state->results) = detail::get_internal_task(t)->get_result(t);
-				else
-					state->event.set_exception(detail::get_internal_task(t)->get_exception());
-			} LIBASYNC_CATCH(...) {
-				// If the assignment of the result threw, propagate the exception
-				state->event.set_exception(std::current_exception());
-			}
-		});
+		first.then(inline_scheduler(), detail::when_all_func_tuple<index, task_type, Result>(detail::ref_count_ptr<detail::when_all_state<Result>>(state)));
 	} LIBASYNC_CATCH(...) {
 		// Make sure we don't leak memory if then() throws
-		state_ptr->remove_ref(sizeof...(T) + 1);
+		state->remove_ref(sizeof...(T));
 		LIBASYNC_RETHROW();
 	}
 
-	// Add continuations to rest of tasks
-	detail::when_all_variadic<index + 1>(state_ptr, std::forward<T>(tasks)...);
+	// Add continuations to remaining tasks
+	detail::when_all_variadic<index + 1>(state, std::forward<T>(tasks)...);
 }
 
 // Internal implementation of when_any for variadic arguments
-template<std::size_t index, typename State>
-void when_any_variadic(when_any_state<State>*) {}
-template<std::size_t index, typename State, typename First, typename... T>
-void when_any_variadic(when_any_state<State>* state_ptr, First&& first, T&&... tasks)
+template<std::size_t index, typename Result>
+void when_any_variadic(when_any_state<Result>*) {}
+template<std::size_t index, typename Result, typename First, typename... T>
+void when_any_variadic(when_any_state<Result>* state, First&& first, T&&... tasks)
 {
-	static_assert(std::is_same<State, typename std::decay<First>::type::result_type>::value, "All tasks given to when_any must have the same result type");
+	typedef typename std::decay<First>::type task_type;
+
+	// Add a copy of the task to the results because the event may be
+	// set before all tasks have finished.
+	detail::task_base* t = detail::get_internal_task(first);
+	t->add_ref();
+	detail::set_internal_task(std::get<index>(state->result), detail::task_ptr(t));
 
 	// Add a continuation to the task
 	LIBASYNC_TRY {
-		first.then(inline_scheduler(), [state_ptr](typename std::decay<First>::type t) {
-			detail::ref_count_ptr<when_any_state<State>> state(state_ptr);
-			LIBASYNC_TRY {
-				if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
-					state->set(index, detail::get_internal_task(t)->get_result(t));
-				else
-					state->event.set_exception(detail::get_internal_task(t)->get_exception());
-			} LIBASYNC_CATCH(...) {
-				// If the copy/move constructor of the result threw, propagate the exception
-				state->event.set_exception(std::current_exception());
-			}
-		});
+		first.then(inline_scheduler(), detail::when_any_func<task_type, Result>(index, detail::ref_count_ptr<detail::when_any_state<Result>>(state)));
 	} LIBASYNC_CATCH(...) {
 		// Make sure we don't leak memory if then() throws
-		state_ptr->remove_ref(sizeof...(T) + 1);
+		state->remove_ref(sizeof...(T));
 		LIBASYNC_RETHROW();
 	}
 
-	// Add continuations to rest of tasks
-	detail::when_any_variadic<index + 1>(state_ptr, std::forward<T>(tasks)...);
+	// Add continuations to remaining tasks
+	detail::when_any_variadic<index + 1>(state, std::forward<T>(tasks)...);
 }
 
 } // namespace detail
 
-// Alias for fake_void, used in variadic when_all
-typedef detail::fake_void void_;
-
 // Combine a set of tasks into one task which is signaled when all specified tasks finish
 template<typename Iter>
-task<typename detail::when_all_state_range<typename std::iterator_traits<Iter>::value_type::result_type>::task_type> when_all(Iter begin, Iter end)
+task<std::vector<typename std::decay<typename std::iterator_traits<Iter>::value_type>::type>> when_all(Iter begin, Iter end)
 {
-	typedef typename std::iterator_traits<Iter>::value_type task_type;
-	typedef typename task_type::result_type result_type;
+	typedef typename std::decay<typename std::iterator_traits<Iter>::value_type>::type task_type;
+	typedef std::vector<task_type> result_type;
 
-	// Handle empty range
+	// Handle empty ranges
 	if (begin == end)
-		return detail::when_all_state_range<result_type>::empty_range();
+		return make_task(result_type());
 
-	// Create shared state
-	auto state_ptr = new detail::when_all_state_range<result_type>(std::distance(begin, end));
-	auto out = state_ptr->event.get_task();
+	// Create shared state, initialized with the proper reference count
+	std::size_t count = std::distance(begin, end);
+	auto* state = new detail::when_all_state<result_type>(count);
+	state->result.resize(count);
+	auto out = state->event.get_task();
 
 	// Add a continuation to each task to add its result to the shared state
 	// Last task sets the event result
 	for (std::size_t i = 0; begin != end; i++, ++begin) {
 		LIBASYNC_TRY {
-			(*begin).then(inline_scheduler(), [state_ptr, i](task_type t) {
-				detail::ref_count_ptr<detail::when_all_state_range<result_type>> state(state_ptr);
-				LIBASYNC_TRY {
-					if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
-						state->set(i, detail::get_internal_task(t)->get_result(t));
-					else
-						state->event.set_exception(detail::get_internal_task(t)->get_exception());
-				} LIBASYNC_CATCH(...) {
-					// If the assignment of the result threw, propagate the exception
-					state->event.set_exception(std::current_exception());
-				}
-			});
+			(*begin).then(inline_scheduler(), detail::when_all_func_range<task_type, result_type>(i, detail::ref_count_ptr<detail::when_all_state<result_type>>(state)));
 		} LIBASYNC_CATCH(...) {
 			// Make sure we don't leak memory if then() throws
-			state_ptr->release(std::distance(begin, end));
+			state->remove_ref(std::distance(begin, end) - 1);
 			LIBASYNC_RETHROW();
 		}
 	}
@@ -234,36 +200,34 @@ task<typename detail::when_all_state_range<typename std::iterator_traits<Iter>::
 
 // Combine a set of tasks into one task which is signaled when one of the tasks finishes
 template<typename Iter>
-task<typename detail::when_any_state<typename std::iterator_traits<Iter>::value_type::result_type>::task_type> when_any(Iter begin, Iter end)
+task<when_any_result<std::vector<typename std::decay<typename std::iterator_traits<Iter>::value_type>::type>>> when_any(Iter begin, Iter end)
 {
-	typedef typename std::iterator_traits<Iter>::value_type task_type;
-	typedef typename task_type::result_type result_type;
+	typedef typename std::decay<typename std::iterator_traits<Iter>::value_type>::type task_type;
+	typedef std::vector<task_type> result_type;
 
-	// Disallow empty ranges
-	LIBASYNC_ASSERT(begin != end, std::invalid_argument, "when_any called with empty range");
+	// Handle empty ranges
+	if (begin == end)
+		return make_task(when_any_result<result_type>());
 
-	// Create shared state
-	auto* state_ptr = new detail::when_any_state<result_type>(std::distance(begin, end));
-	auto out = state_ptr->event.get_task();
+	// Create shared state, initialized with the proper reference count
+	std::size_t count = std::distance(begin, end);
+	auto* state = new detail::when_any_state<result_type>(count);
+	state->result.resize(count);
+	auto out = state->event.get_task();
 
 	// Add a continuation to each task to set the event. First one wins.
 	for (std::size_t i = 0; begin != end; i++, ++begin) {
+		// Add a copy of the task to the results because the event may be
+		// set before all tasks have finished.
+		detail::task_base* t = detail::get_internal_task(*begin);
+		t->add_ref();
+		detail::set_internal_task(state->result[i], detail::task_ptr(t));
+
 		LIBASYNC_TRY {
-			(*begin).then(inline_scheduler(), [state_ptr, i](task_type t) {
-				detail::ref_count_ptr<detail::when_any_state<result_type>> state(state_ptr);
-				LIBASYNC_TRY {
-					if (detail::get_internal_task(t)->state.load(std::memory_order_relaxed) == detail::task_state::completed)
-						state->set(i, detail::get_internal_task(t)->get_result(t));
-					else
-						state->event.set_exception(detail::get_internal_task(t)->get_exception());
-				} LIBASYNC_CATCH(...) {
-					// If the copy/move constructor of the result threw, propagate the exception
-					state->event.set_exception(std::current_exception());
-				}
-			});
+			(*begin).then(inline_scheduler(), detail::when_any_func<task_type, result_type>(i, detail::ref_count_ptr<detail::when_any_state<result_type>>(state)));
 		} LIBASYNC_CATCH(...) {
 			// Make sure we don't leak memory if then() throws
-			state_ptr->release(std::distance(begin, end));
+			state->remove_ref(std::distance(begin, end) - 1);
 			LIBASYNC_RETHROW();
 		}
 	}
@@ -286,33 +250,41 @@ decltype(async::when_any(std::begin(std::declval<T>()), std::end(std::declval<T>
 }
 
 // when_all with variadic arguments
-template<typename First, typename... T>
-task<std::tuple<typename detail::void_to_fake_void<typename std::decay<First>::type::result_type>::type, typename detail::void_to_fake_void<typename std::decay<T>::type::result_type>::type...>> when_all(First&& first, T&&... tasks)
+inline task<std::tuple<>> when_all()
 {
-	typedef std::tuple<typename detail::void_to_fake_void<typename std::decay<First>::type::result_type>::type, typename detail::void_to_fake_void<typename std::decay<T>::type::result_type>::type...> result_type;
+	return async::make_task(std::tuple<>());
+}
+template<typename... T>
+task<std::tuple<typename std::decay<T>::type...>> when_all(T&&... tasks)
+{
+	typedef std::tuple<typename std::decay<T>::type...> result_type;
 
 	// Create shared state
-	auto state = new detail::when_all_state_variadic<result_type>;
+	auto state = new detail::when_all_state<result_type>(sizeof...(tasks));
 	auto out = state->event.get_task();
 
-	// Add continuations to the tasks
-	detail::when_all_variadic<0>(state, std::forward<First>(first), std::forward<T>(tasks)...);
+	// Register all the tasks on the event
+	detail::when_all_variadic<0>(state, std::forward<T>(tasks)...);
 
 	return out;
 }
 
 // when_any with variadic arguments
-template<typename First, typename... T>
-task<typename detail::when_any_state<typename std::decay<First>::type::result_type>::task_type> when_any(First&& first, T&&... tasks)
+inline task<when_any_result<std::tuple<>>> when_any()
 {
-	typedef typename std::decay<First>::type::result_type result_type;
+	return async::make_task(when_any_result<std::tuple<>>());
+}
+template<typename... T>
+task<when_any_result<std::tuple<typename std::decay<T>::type...>>> when_any(T&&... tasks)
+{
+	typedef std::tuple<typename std::decay<T>::type...> result_type;
 
 	// Create shared state
-	auto state = new detail::when_any_state<result_type>(sizeof...(tasks) + 1);
+	auto state = new detail::when_any_state<result_type>(sizeof...(tasks));
 	auto out = state->event.get_task();
 
-	// Add continuations to the tasks
-	detail::when_any_variadic<0>(state, std::forward<First>(first), std::forward<T>(tasks)...);
+	// Register all the tasks on the event
+	detail::when_any_variadic<0>(state, std::forward<T>(tasks)...);
 
 	return out;
 }

@@ -26,9 +26,10 @@ int main()
         return value * 3;
     });
     auto task4 = async::when_all(task1, task3);
-    auto task5 = task4.then([](std::tuple<async::void_, int> results) {
+    auto task5 = task4.then([](std::tuple<async::task<void>,
+                                          async::task<int>> results) {
         std::cout << "Task 5 executes after tasks 1 and 3. Task 3 returned "
-                  << std::get<1>(results) << std::endl;
+                  << std::get<1>(results).get() << std::endl;
     });
 
     task5.get();
