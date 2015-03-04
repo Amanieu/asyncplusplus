@@ -58,7 +58,7 @@
 // Support compiling without exceptions
 #ifndef LIBASYNC_NO_EXCEPTIONS
 # ifdef __clang__
-#  if !__has_feature(cxx_exceptions)
+#  if !defined(__EXCEPTIONS) || !__has_feature(cxx_exceptions)
 #   define LIBASYNC_NO_EXCEPTIONS
 #  endif
 # elif defined(__GNUC__) && !defined(__EXCEPTIONS)
