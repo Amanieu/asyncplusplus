@@ -47,8 +47,10 @@ public:
 		// Resize queue if it is full
 		if (head == ((tail + 1) & (items.size() - 1))) {
 			detail::aligned_array<void*, LIBASYNC_CACHELINE_SIZE> new_items(items.size() * 2);
-			for (std::size_t i = 0; i < tail - head; i++)
+			for (std::size_t i = 0; i != items.size(); i++)
 				new_items[i] = items[(i + head) & (items.size() - 1)];
+			head = 0;
+			tail = items.size() - 1;
 			items = std::move(new_items);
 		}
 
