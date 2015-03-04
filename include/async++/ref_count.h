@@ -79,7 +79,7 @@ public:
 		: p(nullptr) {}
 	ref_count_ptr(std::nullptr_t)
 		: p(nullptr) {}
-	ref_count_ptr(const ref_count_ptr& other)
+	ref_count_ptr(const ref_count_ptr& other) LIBASYNC_NOEXCEPT
 		: p(other.p)
 	{
 		if (p)
@@ -97,10 +97,12 @@ public:
 		p = nullptr;
 		return *this;
 	}
-	ref_count_ptr& operator=(const ref_count_ptr& other)
+	ref_count_ptr& operator=(const ref_count_ptr& other) LIBASYNC_NOEXCEPT
 	{
-		if (p)
+		if (p) {
 			p->remove_ref();
+			p = nullptr;
+		}
 		p = other.p;
 		if (p)
 			p->add_ref();
@@ -108,8 +110,10 @@ public:
 	}
 	ref_count_ptr& operator=(ref_count_ptr&& other) LIBASYNC_NOEXCEPT
 	{
-		if (p)
+		if (p) {
 			p->remove_ref();
+			p = nullptr;
+		}
 		p = other.p;
 		other.p = nullptr;
 		return *this;
