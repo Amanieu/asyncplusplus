@@ -48,8 +48,9 @@ struct threadpool_data {
 	// Shutdown request indicator
 	bool shutdown;
 
-	// List of threads waiting for tasks to run
-	std::size_t num_waiters;
+	// List of threads waiting for tasks to run. num_waiters needs to be atomic
+	// because it is sometimes read outside the mutex.
+	std::atomic<std::size_t> num_waiters;
 	std::unique_ptr<task_wait_event*[]> waiters;
 
 #ifdef BROKEN_JOIN_IN_DESTRUCTOR
@@ -152,7 +153,9 @@ static void thread_task_loop(threadpool_data* impl, task_wait_handle wait_task)
 			}
 
 			// Add our thread to the list of waiting threads
-			impl->waiters[impl->num_waiters++] = &current_thread.event;
+			size_t num_waiters_val = impl->num_waiters.load(std::memory_order_relaxed);
+			impl->waiters[num_waiters_val] = &current_thread.event;
+			impl->num_waiters.store(num_waiters_val + 1, std::memory_order_relaxed);
 
 			// Wait for our event to be signaled when a task is scheduled or
 			// the task we are waiting for has completed.
@@ -161,11 +164,12 @@ static void thread_task_loop(threadpool_data* impl, task_wait_handle wait_task)
 			locked.lock();
 
 			// Remove our thread from the list of waiting threads
-			for (std::size_t i = 0; i < impl->num_waiters; i++) {
+			num_waiters_val = impl->num_waiters.load(std::memory_order_relaxed);
+			for (std::size_t i = 0; i < num_waiters_val; i++) {
 				if (impl->waiters[i] == &current_thread.event) {
-					if (i != impl->num_waiters - 1)
-						std::swap(impl->waiters[i], impl->waiters[impl->num_waiters - 1]);
-					impl->num_waiters--;
+					if (i != num_waiters_val - 1)
+						std::swap(impl->waiters[i], impl->waiters[num_waiters_val - 1]);
+					impl->num_waiters.store(num_waiters_val - 1, std::memory_order_relaxed);
 					break;
 				}
 			}
@@ -245,9 +249,10 @@ threadpool_scheduler::~threadpool_scheduler()
 		impl->shutdown = true;
 
 		// Wake up any sleeping threads
-		for (std::size_t i = 0; i < impl->num_waiters; i++)
+		size_t num_waiters_val = impl->num_waiters.load(std::memory_order_relaxed);
+		for (std::size_t i = 0; i < num_waiters_val; i++)
 			impl->waiters[i]->signal(detail::wait_type::task_available);
-		impl->num_waiters = 0;
+		impl->num_waiters.store(0, std::memory_order_relaxed);
 
 #ifdef BROKEN_JOIN_IN_DESTRUCTOR
 		// Wait for the threads to exit
@@ -271,21 +276,22 @@ void threadpool_scheduler::schedule(task_run_handle t)
 		// Push the task onto our task queue
 		impl->thread_data[detail::thread_id].queue.push(std::move(t));
 
-		// If there are no sleeping threads, return.
-		// Technically this isn't thread safe, but we don't care because we
-		// check again inside the lock.
-		if (impl->num_waiters == 0)
+		// If there are no sleeping threads, just return. We check outside the
+		// lock to avoid locking overhead in the fast path.
+		if (impl->num_waiters.load(std::memory_order_relaxed) == 0)
 			return;
 
 		// Get a thread to wake up from the list
 		std::lock_guard<std::mutex> locked(impl->lock);
 
 		// Check again if there are waiters
-		if (impl->num_waiters == 0)
+		size_t num_waiters_val = impl->num_waiters.load(std::memory_order_relaxed);
+		if (num_waiters_val == 0)
 			return;
 
 		// Pop a thread from the list and wake it up
-		impl->waiters[--impl->num_waiters]->signal(detail::wait_type::task_available);
+		impl->waiters[num_waiters_val - 1]->signal(detail::wait_type::task_available);
+		impl->num_waiters.store(num_waiters_val - 1, std::memory_order_relaxed);
 	} else {
 		std::lock_guard<std::mutex> locked(impl->lock);
 
@@ -293,9 +299,11 @@ void threadpool_scheduler::schedule(task_run_handle t)
 		impl->public_queue.push(std::move(t));
 
 		// Wake up a sleeping thread
-		if (impl->num_waiters == 0)
+		size_t num_waiters_val = impl->num_waiters.load(std::memory_order_relaxed);
+		if (num_waiters_val == 0)
 			return;
-		impl->waiters[--impl->num_waiters]->signal(detail::wait_type::task_available);
+		impl->waiters[num_waiters_val - 1]->signal(detail::wait_type::task_available);
+		impl->num_waiters.store(num_waiters_val - 1, std::memory_order_relaxed);
 	}
 }
 
