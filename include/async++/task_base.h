@@ -64,9 +64,6 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base, task
 	// Task state
 	std::atomic<task_state> state;
 
-	// Whether this task should be run even if the parent was canceled
-	bool always_cont;
-
 	// Whether get_task() was already called on an event_task
 	bool event_task_got_task;
 
@@ -100,41 +97,32 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base, task
 		return is_finished(state.load(std::memory_order_acquire));
 	}
 
-	// Run a single continuation. See add_continuation for an explaination of
-	// the except parameter.
+	// Run a single continuation
 	template<typename Sched>
-	void run_continuation(Sched& sched, task_ptr&& cont, bool cancel, bool always_cont, std::exception_ptr* except)
+	void run_continuation(Sched& sched, task_ptr&& cont)
 	{
-		// Handle continuations that run even if the parent task is canceled
-		if (!cancel || always_cont) {
-			LIBASYNC_TRY {
-				detail::schedule_task(sched, std::move(cont));
-			} LIBASYNC_CATCH(...) {
-				// This is suboptimal, but better than letting the exception leak
-				cont->vtable->cancel(cont.get(), std::current_exception());
-			}
-		} else
-			cont->vtable->cancel(cont.get(), std::exception_ptr(*except));
+		LIBASYNC_TRY {
+			detail::schedule_task(sched, std::move(cont));
+		} LIBASYNC_CATCH(...) {
+			// This is suboptimal, but better than letting the exception leak
+			cont->vtable->cancel(cont.get(), std::current_exception());
+		}
 	}
 
 	// Run all of the task's continuations after it has completed or canceled.
-	// The list of continuations is then emptied. See add_continuation for an
-	// explaination of the except parameter.
-	void run_continuations(bool cancel, std::exception_ptr* except)
+	// The list of continuations is emptied and locked to prevent any further
+	// continuations from being added.
+	void run_continuations()
 	{
-		continuations.flush_and_lock([this, cancel, except](task_ptr t) {
+		continuations.flush_and_lock([this](task_ptr t) {
 			scheduler_ref sched(t->sched, t->vtable->schedule);
-			run_continuation(sched, std::move(t), cancel, t->always_cont, except);
+			run_continuation(sched, std::move(t));
 		});
 	}
 
-	// Add a continuation to this task. The except parameter is a hack to
-	// support task_wait_handle::on_finish which does not have enough type
-	// information to call get_exception(). It should be set to the result of
-	// task_result::get_exception(), but can be set to nullptr if it is not
-	// used, such as when cont->always_cont is true.
+	// Add a continuation to this task
 	template<typename Sched>
-	void add_continuation(Sched& sched, task_ptr cont, bool always_cont, std::exception_ptr* except)
+	void add_continuation(Sched& sched, task_ptr cont)
 	{
 		// Check for task completion
 		task_state current_state = state.load(std::memory_order_relaxed);
@@ -142,23 +130,20 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base, task
 			// Try to add the task to the continuation list. This can fail only
 			// if the task has just finished, in which case we run it directly.
 			cont->sched = std::addressof(sched);
-			cont->always_cont = always_cont;
 			if (continuations.try_add(std::move(cont)))
 				return;
 		}
 
 		// Otherwise run the continuation directly
 		std::atomic_thread_fence(std::memory_order_acquire);
-		run_continuation(sched, std::move(cont), current_state == task_state::canceled, always_cont, except);
+		run_continuation(sched, std::move(cont));
 	}
 
 	// Finish the task after it has been executed and the result set
 	void finish()
 	{
-		// We don't care about the exception_ptr parameter here because the task
-		// has completed successfully without an exception.
 		state.store(task_state::completed, std::memory_order_release);
-		run_continuations(false, nullptr);
+		run_continuations();
 	}
 
 	// Wait for the task to finish executing
@@ -287,7 +272,7 @@ struct task_result: public task_result_holder<Result> {
 	{
 		set_exception(std::move(except));
 		this->state.store(task_state::canceled, std::memory_order_release);
-		this->run_continuations(true, &get_exception());
+		this->run_continuations();
 	}
 
 	// Set the exception value of the task
@@ -549,9 +534,13 @@ struct continuation_exec_func<Sched, Parent, Result, Func, true, false>: private
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
-		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), get_internal_task(parent)->get_result(parent)));
-		static_cast<task_func<Sched, continuation_exec_func, Result>*>(t)->destroy_func();
-		t->finish();
+		if (get_internal_task(parent)->state.load(std::memory_order_relaxed) == task_state::canceled)
+			task_func<Sched, continuation_exec_func, Result>::cancel(t, std::exception_ptr(get_internal_task(parent)->get_exception()));
+		else {
+			static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), get_internal_task(parent)->get_result(parent)));
+			static_cast<task_func<Sched, continuation_exec_func, Result>*>(t)->destroy_func();
+			t->finish();
+		}
 	}
 	Parent parent;
 };
@@ -573,7 +562,10 @@ struct continuation_exec_func<Sched, Parent, Result, Func, true, true>: private 
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
-		unwrapped_finish<Sched, Result, continuation_exec_func>(t, invoke_fake_void(std::move(this->get_func()), get_internal_task(parent)->get_result(parent)));
+		if (get_internal_task(parent)->state.load(std::memory_order_relaxed) == task_state::canceled)
+			task_func<Sched, continuation_exec_func, Result>::cancel(t, std::exception_ptr(get_internal_task(parent)->get_exception()));
+		else
+			unwrapped_finish<Sched, Result, continuation_exec_func>(t, invoke_fake_void(std::move(this->get_func()), get_internal_task(parent)->get_result(parent)));
 	}
 	Parent parent;
 };

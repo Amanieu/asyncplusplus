@@ -77,7 +77,7 @@ class basic_task {
 		// Add the continuation to this task
 		// Avoid an expensive ref-count modification since the task isn't shared yet
 		get_internal_task(cont)->add_ref_unlocked();
-		my_internal->add_continuation(sched, task_ptr(get_internal_task(cont)), !traits::is_value_cont::value, &static_cast<internal_task_type*>(my_internal)->get_exception());
+		my_internal->add_continuation(sched, task_ptr(get_internal_task(cont)));
 
 		return cont;
 	}

@@ -75,10 +75,8 @@ public:
 		// Make sure the function type is callable
 		static_assert(detail::is_callable<Func()>::value, "Invalid function type passed to on_finish()");
 
-		// We are passing nullptr to add_continuation because it doesn't use
-		// the parent's exception for always_cont continuations.
 		detail::task_ptr cont(new detail::task_func<typename std::remove_reference<decltype(inline_scheduler())>::type, wait_exec_func<typename std::decay<Func>::type>, detail::fake_void>(std::forward<Func>(func)));
-		handle->add_continuation(inline_scheduler(), std::move(cont), true, nullptr);
+		handle->add_continuation(inline_scheduler(), std::move(cont));
 	}
 };
 
