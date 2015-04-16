@@ -495,7 +495,7 @@ struct root_exec_func: private func_base<Func> {
 		: func_base<Func>(std::forward<F>(f)) {}
 	void operator()(task_base* t)
 	{
-		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func())));
+		static_cast<task_result<Result>*>(t)->set_result(detail::invoke_fake_void(std::move(this->get_func())));
 		static_cast<task_func<Sched, root_exec_func, Result>*>(t)->destroy_func();
 		t->finish();
 	}
@@ -521,7 +521,7 @@ struct continuation_exec_func: private func_base<Func> {
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
-		static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), std::move(parent)));
+		static_cast<task_result<Result>*>(t)->set_result(detail::invoke_fake_void(std::move(this->get_func()), std::move(parent)));
 		static_cast<task_func<Sched, continuation_exec_func, Result>*>(t)->destroy_func();
 		t->finish();
 	}
@@ -537,7 +537,7 @@ struct continuation_exec_func<Sched, Parent, Result, Func, true, false>: private
 		if (get_internal_task(parent)->state.load(std::memory_order_relaxed) == task_state::canceled)
 			task_func<Sched, continuation_exec_func, Result>::cancel(t, std::exception_ptr(get_internal_task(parent)->get_exception()));
 		else {
-			static_cast<task_result<Result>*>(t)->set_result(invoke_fake_void(std::move(this->get_func()), get_internal_task(parent)->get_result(parent)));
+			static_cast<task_result<Result>*>(t)->set_result(detail::invoke_fake_void(std::move(this->get_func()), get_internal_task(parent)->get_result(parent)));
 			static_cast<task_func<Sched, continuation_exec_func, Result>*>(t)->destroy_func();
 			t->finish();
 		}
@@ -551,7 +551,7 @@ struct continuation_exec_func<Sched, Parent, Result, Func, false, true>: private
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
 	void operator()(task_base* t)
 	{
-		unwrapped_finish<Sched, Result, continuation_exec_func>(t, invoke_fake_void(std::move(this->get_func()), std::move(parent)));
+		unwrapped_finish<Sched, Result, continuation_exec_func>(t, detail::invoke_fake_void(std::move(this->get_func()), std::move(parent)));
 	}
 	Parent parent;
 };
@@ -565,7 +565,7 @@ struct continuation_exec_func<Sched, Parent, Result, Func, true, true>: private 
 		if (get_internal_task(parent)->state.load(std::memory_order_relaxed) == task_state::canceled)
 			task_func<Sched, continuation_exec_func, Result>::cancel(t, std::exception_ptr(get_internal_task(parent)->get_exception()));
 		else
-			unwrapped_finish<Sched, Result, continuation_exec_func>(t, invoke_fake_void(std::move(this->get_func()), get_internal_task(parent)->get_result(parent)));
+			unwrapped_finish<Sched, Result, continuation_exec_func>(t, detail::invoke_fake_void(std::move(this->get_func()), get_internal_task(parent)->get_result(parent)));
 	}
 	Parent parent;
 };
