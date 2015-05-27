@@ -20,6 +20,11 @@
 
 #include "internal.h"
 
+// For GetProcAddress and GetModuleHandle
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace async {
 namespace detail {
 
@@ -242,6 +247,26 @@ threadpool_scheduler::threadpool_scheduler(std::size_t num_threads)
 // Wait for all currently running tasks to finish
 threadpool_scheduler::~threadpool_scheduler()
 {
+#ifdef _WIN32
+	// Windows kills all threads except one on process exit before calling
+	// global destructors in DLLs. Waiting for dead threads to exit will likely
+	// result in deadlocks, so we just exit early if we detect that the process
+	// is exiting.
+	auto RtlDllShutdownInProgress = reinterpret_cast<BOOLEAN(WINAPI *)()>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlDllShutdownInProgress"));
+	if (RtlDllShutdownInProgress && RtlDllShutdownInProgress()) {
+# ifndef BROKEN_JOIN_IN_DESTRUCTOR
+		// We still need to detach the thread handles otherwise the std::thread
+		// destructor will throw an exception.
+		for (std::size_t i = 0; i < impl->thread_data.size(); i++) {
+			try {
+				impl->thread_data[i].handle.detach();
+			} catch (...) {}
+		}
+# endif
+		return;
+	}
+#endif
+
 	{
 		std::unique_lock<std::mutex> locked(impl->lock);
 
