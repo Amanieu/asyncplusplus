@@ -257,7 +257,7 @@ threadpool_scheduler::~threadpool_scheduler()
 # ifndef BROKEN_JOIN_IN_DESTRUCTOR
 		// We still need to detach the thread handles otherwise the std::thread
 		// destructor will throw an exception.
-		for (std::size_t i = 0; i < impl->thread_data.size(); i++) {
+		for (std::size_t i = 0, threadCount = impl->thread_data.size(); i < threadCount; i++) {
 			try {
 				impl->thread_data[i].handle.detach();
 			} catch (...) {}
@@ -288,7 +288,7 @@ threadpool_scheduler::~threadpool_scheduler()
 
 #ifndef BROKEN_JOIN_IN_DESTRUCTOR
 	// Wait for the threads to exit
-	for (std::size_t i = 0; i < impl->thread_data.size(); i++)
+	for (std::size_t i = 0, threadCount = impl->thread_data.size(); i < threadCount; i++)
 		impl->thread_data[i].handle.join();
 #endif
 }
@@ -307,16 +307,18 @@ void threadpool_scheduler::schedule(task_run_handle t)
 			return;
 
 		// Get a thread to wake up from the list
-		std::lock_guard<std::mutex> locked(impl->lock);
-
-		// Check again if there are waiters
-		size_t num_waiters_val = impl->num_waiters.load(std::memory_order_relaxed);
-		if (num_waiters_val == 0)
+		// lock scope
+		{
+		    std::lock_guard<std::mutex> locked(impl->lock);
+		    // Check again if there are waiters
+		    size_t num_waiters_val = impl->num_waiters.load(std::memory_order_relaxed);
+		    if (num_waiters_val == 0)
 			return;
-
-		// Pop a thread from the list and wake it up
-		impl->waiters[num_waiters_val - 1]->signal(detail::wait_type::task_available);
-		impl->num_waiters.store(num_waiters_val - 1, std::memory_order_relaxed);
+	
+			// Pop a thread from the list and wake it up
+		    impl->waiters[num_waiters_val - 1]->signal(detail::wait_type::task_available);
+		    impl->num_waiters.store(num_waiters_val - 1, std::memory_order_relaxed);
+		}
 	} else {
 		std::lock_guard<std::mutex> locked(impl->lock);
 
