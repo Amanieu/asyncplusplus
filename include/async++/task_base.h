@@ -55,7 +55,7 @@ struct task_base_vtable {
 	void (*cancel)(task_base*, std::exception_ptr&&) LIBASYNC_NOEXCEPT;
 
 	// Schedule the task using its scheduler
-	void (*schedule)(void* sched, task_run_handle&& t);
+	void (*schedule)(task_base* parent, task_ptr t);
 };
 
 // Type-generic base task object
@@ -69,10 +69,6 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base, task
 
 	// Vector of continuations
 	continuation_vector continuations;
-
-	// Scheduler that should be used to schedule this task. The scheduler type
-	// has been erased and is held by vtable->schedule.
-	void* sched;
 
 	// Virtual function table used for dynamic dispatch
 	const task_base_vtable* vtable;
@@ -115,8 +111,7 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base, task
 	void run_continuations()
 	{
 		continuations.flush_and_lock([this](task_ptr t) {
-			scheduler_ref sched(t->sched, t->vtable->schedule);
-			run_continuation(sched, std::move(t));
+			t->vtable->schedule(this, std::move(t));
 		});
 	}
 
@@ -129,7 +124,6 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base, task
 		if (!is_finished(current_state)) {
 			// Try to add the task to the continuation list. This can fail only
 			// if the task has just finished, in which case we run it directly.
-			cont->sched = std::addressof(sched);
 			if (continuations.try_add(std::move(cont)))
 				return;
 		}
@@ -173,6 +167,10 @@ struct task_result_holder: public task_base {
 	union {
 		typename std::aligned_storage<sizeof(Result), std::alignment_of<Result>::value>::type result;
 		std::aligned_storage<sizeof(std::exception_ptr), std::alignment_of<std::exception_ptr>::value>::type except;
+
+		// Scheduler that should be used to schedule this task. The scheduler
+		// type has been erased and is held by vtable->schedule.
+		void* sched;
 	};
 
 	template<typename T>
@@ -210,6 +208,7 @@ struct task_result_holder<Result&>: public task_base {
 		// Store as pointer internally
 		Result* result;
 		std::aligned_storage<sizeof(std::exception_ptr), std::alignment_of<std::exception_ptr>::value>::type except;
+		void* sched;
 	};
 
 	void set_result(Result& obj)
@@ -232,7 +231,10 @@ struct task_result_holder<Result&>: public task_base {
 // Specialization for void
 template<>
 struct task_result_holder<fake_void>: public task_base {
-	std::aligned_storage<sizeof(std::exception_ptr), std::alignment_of<std::exception_ptr>::value>::type except;
+	union {
+		std::aligned_storage<sizeof(std::exception_ptr), std::alignment_of<std::exception_ptr>::value>::type except;
+		void* sched;
+	};
 
 	void set_result(fake_void) {}
 
@@ -297,7 +299,7 @@ struct task_result: public task_result_holder<Result> {
 	// Delete the task using its proper type
 	static void destroy(task_base* t) LIBASYNC_NOEXCEPT
 	{
-		delete static_cast<task_result<Result>*>(t);;
+		delete static_cast<task_result<Result>*>(t);
 	}
 };
 template<typename Result>
@@ -407,6 +409,13 @@ struct task_func: public task_result<Result>, func_holder<Func> {
 		static_cast<task_func<Sched, Func, Result>*>(t)->cancel_base(std::move(except));
 	}
 
+	// Schedule a continuation task using its scheduler
+	static void schedule(task_base* parent, task_ptr t)
+	{
+		void* sched = static_cast<task_func<Sched, Func, Result>*>(t.get())->sched;
+		parent->run_continuation(*static_cast<Sched*>(sched), std::move(t));
+	}
+
 	// Free the function
 	~task_func()
 	{
@@ -427,7 +436,7 @@ const task_base_vtable task_func<Sched, Func, Result>::vtable_impl = {
 	task_func<Sched, Func, Result>::destroy, // destroy
 	task_func<Sched, Func, Result>::run, // run
 	task_func<Sched, Func, Result>::cancel, // cancel
-	scheduler_ref::invoke_sched<Sched> // schedule
+	task_func<Sched, Func, Result>::schedule // schedule
 };
 
 // Helper functions to access the internal_task member of a task object, which

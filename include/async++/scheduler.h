@@ -75,8 +75,9 @@ public:
 		// Make sure the function type is callable
 		static_assert(detail::is_callable<Func()>::value, "Invalid function type passed to on_finish()");
 
-		detail::task_ptr cont(new detail::task_func<typename std::remove_reference<decltype(inline_scheduler())>::type, wait_exec_func<typename std::decay<Func>::type>, detail::fake_void>(std::forward<Func>(func)));
-		handle->add_continuation(inline_scheduler(), std::move(cont));
+		auto cont = new detail::task_func<typename std::remove_reference<decltype(inline_scheduler())>::type, wait_exec_func<typename std::decay<Func>::type>, detail::fake_void>(std::forward<Func>(func));
+		cont->sched = std::addressof(inline_scheduler());
+		handle->add_continuation(inline_scheduler(), detail::task_ptr(cont));
 	}
 };
 

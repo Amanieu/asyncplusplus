@@ -43,32 +43,6 @@ one& is_scheduler_helper(...);
 template<typename T>
 struct is_scheduler: public std::integral_constant<bool, sizeof(is_scheduler_helper<T>(0)) - 1> {};
 
-// Type-erased reference to a scheduler, which is itself a scheduler
-class scheduler_ref {
-	// Type-erased data
-	void* sched_ptr;
-	void (*sched_func)(void* sched, task_run_handle&& t);
-
-public:
-	// Scheduler invocation function
-	template<typename T>
-	static void invoke_sched(void* sched, task_run_handle&& t)
-	{
-		static_assert(is_scheduler<T>::value, "Type is not a valid scheduler");
-		static_cast<T*>(sched)->schedule(std::move(t));
-	}
-
-	// Wrap a scheduler using the given invocation function
-	scheduler_ref(void* sched, void (*invoke)(void* sched, task_run_handle&& t))
-		: sched_ptr(sched), sched_func(invoke) {}
-
-	// Forward tasks to the wrapped scheduler
-	void schedule(task_run_handle&& t)
-	{
-		sched_func(sched_ptr, std::move(t));
-	}
-};
-
 // Singleton scheduler classes
 class thread_scheduler_impl {
 public:
