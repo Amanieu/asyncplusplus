@@ -426,8 +426,15 @@ public:
 
 		// Now spin until the reference count drops to 1, since the scheduler
 		// may still have a reference to the task.
-		while (!internal_task.is_unique_ref(std::memory_order_acquire))
+		while (!internal_task.is_unique_ref(std::memory_order_acquire)) {
+#if defined(__GLIBCXX__) && __GLIBCXX__ <= 20140612
+			// Some versions of libstdc++ (4.7 and below) don't include a
+			// definition of std::this_thread::yield().
+			sched_yield();
+#else
 			std::this_thread::yield();
+#endif
+		}
 	}
 
 	// Query whether the task has finished executing
