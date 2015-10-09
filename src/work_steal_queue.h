@@ -104,20 +104,20 @@ public:
 	void push(task_run_handle x)
 	{
 		std::size_t b = bottom.load(std::memory_order_relaxed);
-		std::size_t t = top.load(std::memory_order_relaxed);
+		std::size_t t = top.load(std::memory_order_acquire);
 		circular_array* a = array.load(std::memory_order_relaxed);
 
 		// Grow the array if it is full
 		if (to_signed(b - t) >= to_signed(a->size())) {
 			a = a->grow(t, b);
 			array.store(a, std::memory_order_release);
-		} else
-			std::atomic_thread_fence(std::memory_order_acquire);
+		}
 
 		// Note that we only convert to void* here in case grow throws due to
 		// lack of memory.
 		a->put(b, x.to_void_ptr());
-		bottom.store(b + 1, std::memory_order_release);
+		std::atomic_thread_fence(std::memory_order_release);
+		bottom.store(b + 1, std::memory_order_relaxed);
 	}
 
 	// Pop a task from the bottom of this thread's queue
@@ -147,7 +147,7 @@ public:
 
 		// If this was the last element in the queue, check for races
 		if (b == t) {
-			if (!top.compare_exchange_strong(t, t + 1, std::memory_order_relaxed, std::memory_order_relaxed)) {
+			if (!top.compare_exchange_strong(t, t + 1, std::memory_order_seq_cst, std::memory_order_relaxed)) {
 				bottom.store(b + 1, std::memory_order_relaxed);
 				return task_run_handle();
 			}
@@ -163,21 +163,20 @@ public:
 		// a fail means that another thread has sucessfully stolen a task.
 		while (true) {
 			// Make sure top is read before bottom
-			std::size_t t = top.load(std::memory_order_relaxed);
+			std::size_t t = top.load(std::memory_order_acquire);
 			std::atomic_thread_fence(std::memory_order_seq_cst);
-			std::size_t b = bottom.load(std::memory_order_relaxed);
+			std::size_t b = bottom.load(std::memory_order_acquire);
 
 			// Exit if the queue is empty
 			if (to_signed(b - t) <= 0)
 				return task_run_handle();
 
 			// Fetch the element from the queue
-			std::atomic_thread_fence(std::memory_order_acquire);
 			circular_array* a = array.load(std::memory_order_consume);
 			void* x = a->get(t);
 
 			// Attempt to increment top
-			if (top.compare_exchange_weak(t, t + 1, std::memory_order_release, std::memory_order_relaxed))
+			if (top.compare_exchange_weak(t, t + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
 				return task_run_handle::from_void_ptr(x);
 		}
 	}
