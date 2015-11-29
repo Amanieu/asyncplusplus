@@ -111,7 +111,8 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base, task
 	void run_continuations()
 	{
 		continuations.flush_and_lock([this](task_ptr t) {
-			t->vtable->schedule(this, std::move(t));
+			const task_base_vtable* vtable = t->vtable;
+			vtable->schedule(this, std::move(t));
 		});
 	}
 
