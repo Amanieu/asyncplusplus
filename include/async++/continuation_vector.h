@@ -117,10 +117,11 @@ class continuation_vector {
 public:
 	// Start unlocked with zero elements in the fast path
 	continuation_vector()
-#if defined(__clang__) && defined(__APPLE__) && defined(_LIBCPP_VERSION)
+#if defined(__clang__) && defined(_LIBCPP_VERSION)
 	{
 		// Workaround for a bug in certain versions of Apple's clang with libc++
 		// error: no viable conversion from 'async::detail::compressed_ptr<3, true>' to '_Atomic(async::detail::compressed_ptr<3, true>)'
+        // this bug also affects FreeBSD's clang and libc++, thus a defined(__APPLE__) is incorrect in this case.
 		std::atomic_init(&atomic_data, internal_data(nullptr, 0));
 	}
 #else
