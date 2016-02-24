@@ -119,8 +119,8 @@ static void create_threadpool_data(threadpool_data* owning_threadpool_, std::siz
 	// the memory allocated here gets deallocated by the lambda declared on the key creation
 	pthread_setspecific(get_local_threadpool_data_key(), new threadpool_data_wrapper(owning_threadpool_, thread_id_));
 #else
-	owning_threadpool = _owning_threadpool;
-	thread_id = _thread_id;
+	owning_threadpool = owning_threadpool_;
+	thread_id = thread_id_;
 #endif
 }
 	
