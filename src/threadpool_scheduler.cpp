@@ -25,6 +25,11 @@
 #include <windows.h>
 #endif
 
+// for pthread thread_local emulation
+#if defined(EMULATE_PTHREAD_THREAD_LOCAL)
+# include <pthread.h>
+#endif
+
 namespace async {
 namespace detail {
 
@@ -65,14 +70,76 @@ struct threadpool_data {
 #endif
 };
 
+// this wrapper encapsulates both the owning_threadpool pointer and the thread id.
+// this is done to improve performance on the emulated thread_local reducing the number
+// of calls to "pthread_getspecific"
+struct threadpool_data_wrapper {
+	threadpool_data* owning_threadpool;
+	std::size_t thread_id;
+
+	threadpool_data_wrapper(threadpool_data* owning_threadpool, std::size_t thread_id):
+		owning_threadpool(owning_threadpool), thread_id(thread_id) { }
+};
+
+#if defined(EMULATE_PTHREAD_THREAD_LOCAL)
+struct pthread_emulation_threadpool_data_initializer {
+	pthread_key_t key;
+	
+	pthread_emulation_threadpool_data_initializer()
+	{
+		pthread_key_create(&key, [](void* wrapper_ptr) {
+			threadpool_data_wrapper* wrapper = static_cast<threadpool_data_wrapper*>(wrapper_ptr);
+			delete wrapper;
+		});
+	}
+		
+	~pthread_emulation_threadpool_data_initializer()
+	{
+		pthread_key_delete(key);
+	}
+};
+	
+static pthread_key_t get_local_threadpool_data_key()
+{
+	static pthread_emulation_threadpool_data_initializer initializer;
+	return initializer.key;
+}
+
+#else
 // Thread pool this thread belongs to, or null if not in pool
 static THREAD_LOCAL threadpool_data* owning_threadpool = nullptr;
 
 // Current thread's index in the pool
 static THREAD_LOCAL std::size_t thread_id;
+#endif
+	
+static void create_threadpool_data(threadpool_data* owning_threadpool_, std::size_t thread_id_)
+{
+#if defined(EMULATE_PTHREAD_THREAD_LOCAL)
+	// the memory allocated here gets deallocated by the lambda declared on the key creation
+	pthread_setspecific(get_local_threadpool_data_key(), new threadpool_data_wrapper(owning_threadpool_, thread_id_));
+#else
+	owning_threadpool = _owning_threadpool;
+	thread_id = _thread_id;
+#endif
+}
+	
+static threadpool_data_wrapper get_threadpool_data_wrapper()
+{
+#if defined(EMULATE_PTHREAD_THREAD_LOCAL)
+	threadpool_data_wrapper* wrapper = static_cast<threadpool_data_wrapper*>(pthread_getspecific(get_local_threadpool_data_key()));
+	if(wrapper == nullptr) {
+		// if, for some reason, the wrapper is not set, this won't cause a crash
+		return threadpool_data_wrapper(nullptr, 0);
+	}
+	return *wrapper;
+#else
+	return threadpool_data_wrapper(owning_threadpool, thread_id);
+#endif
+}
 
 // Try to steal a task from another thread's queue
-static task_run_handle steal_task(threadpool_data* impl)
+static task_run_handle steal_task(threadpool_data* impl, std::size_t thread_id)
 {
 	// Make a list of victim thread ids and shuffle it
 	std::vector<std::size_t> victims(impl->thread_data.size());
@@ -97,10 +164,10 @@ static task_run_handle steal_task(threadpool_data* impl)
 
 // Main task stealing loop which is used by worker threads when they have
 // nothing to do.
-static void thread_task_loop(threadpool_data* impl, task_wait_handle wait_task)
+static void thread_task_loop(threadpool_data* impl, std::size_t thread_id, task_wait_handle wait_task)
 {
 	// Get our thread's data
-	thread_data_t& current_thread = owning_threadpool->thread_data[thread_id];
+	thread_data_t& current_thread = impl->thread_data[thread_id];
 
 	// Flag indicating if we have added a continuation to the task
 	bool added_continuation = false;
@@ -121,7 +188,7 @@ static void thread_task_loop(threadpool_data* impl, task_wait_handle wait_task)
 		// Stealing loop
 		while (true) {
 			// Try to steal a task
-			if (task_run_handle t = steal_task(impl)) {
+			if (task_run_handle t = steal_task(impl, thread_id)) {
 				t.run();
 				break;
 			}
@@ -189,15 +256,15 @@ static void thread_task_loop(threadpool_data* impl, task_wait_handle wait_task)
 // Wait for a task to complete (for worker threads inside thread pool)
 static void threadpool_wait_handler(task_wait_handle wait_task)
 {
-	thread_task_loop(owning_threadpool, wait_task);
+	threadpool_data_wrapper wrapper = get_threadpool_data_wrapper();
+	thread_task_loop(wrapper.owning_threadpool, wrapper.thread_id, wait_task);
 }
 
 // Worker thread main loop
-static void worker_thread(threadpool_data* impl, std::size_t id)
+static void worker_thread(threadpool_data* owning_threadpool, std::size_t thread_id)
 {
-	// Save the thread id and owning threadpool
-	owning_threadpool = impl;
-	thread_id = id;
+	// store on the local thread data
+	create_threadpool_data(owning_threadpool, thread_id);
 
 	// Set the wait handler so threads from the pool do useful work while
 	// waiting for another task to finish.
@@ -205,10 +272,10 @@ static void worker_thread(threadpool_data* impl, std::size_t id)
 
 	// Seed the random number generator with our id. This gives each thread a
 	// different steal order.
-	impl->thread_data[thread_id].rng.seed(static_cast<std::minstd_rand::result_type>(thread_id));
+	owning_threadpool->thread_data[thread_id].rng.seed(static_cast<std::minstd_rand::result_type>(thread_id));
 
 	// Main loop, runs until the shutdown signal is recieved
-	thread_task_loop(impl, task_wait_handle());
+	thread_task_loop(owning_threadpool, thread_id, task_wait_handle());
 }
 
 // Recursive function to spawn all worker threads in parallel
@@ -296,10 +363,12 @@ threadpool_scheduler::~threadpool_scheduler()
 // Schedule a task on the thread pool
 void threadpool_scheduler::schedule(task_run_handle t)
 {
+	detail::threadpool_data_wrapper wrapper = detail::get_threadpool_data_wrapper();
+	
 	// Check if we are in the thread pool
-	if (detail::owning_threadpool == impl.get()) {
+	if (wrapper.owning_threadpool == impl.get()) {
 		// Push the task onto our task queue
-		impl->thread_data[detail::thread_id].queue.push(std::move(t));
+		impl->thread_data[wrapper.thread_id].queue.push(std::move(t));
 
 		// If there are no sleeping threads, just return. We check outside the
 		// lock to avoid locking overhead in the fast path.

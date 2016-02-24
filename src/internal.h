@@ -68,6 +68,19 @@
 # define BROKEN_JOIN_IN_DESTRUCTOR
 #endif
 
+// Apple's iOS has no thread local support yet. They claim that they don't want to
+// introduce a binary compatility issue when they got a better implementation available.
+// Luckily, pthreads supports some kind of "emulation" for that. This detects if the we
+// are compiling for iOS and enables the workaround accordingly.
+// It is also possible enabling it forcibly by setting the EMULATE_PTHREAD_THREAD_LOCAL
+// macro. Obviously, this will only works on platforms with pthread available.
+#if __APPLE__
+# include "TargetConditionals.h"
+# if TARGET_IPHONE_SIMULATOR || TARGET_OS_IPHONE
+#  define EMULATE_PTHREAD_THREAD_LOCAL
+# endif
+#endif
+
 // Force symbol visibility to hidden unless explicity exported
 #if defined(__GNUC__) && !defined(_WIN32)
 # pragma GCC visibility push(hidden)

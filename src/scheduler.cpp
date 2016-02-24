@@ -20,6 +20,11 @@
 
 #include "internal.h"
 
+// for pthread thread_local emulation
+#if defined(EMULATE_PTHREAD_THREAD_LOCAL)
+# include <pthread.h>
+#endif
+
 namespace async {
 namespace detail {
 
@@ -64,13 +69,65 @@ static void generic_wait_handler(task_wait_handle wait_task)
 	thread_event.wait();
 }
 
+#if defined(EMULATE_PTHREAD_THREAD_LOCAL)
 // Wait handler function, per-thread, defaults to generic version
+struct pthread_emulation_thread_wait_handler_key_initializer {
+	pthread_key_t key;
+		
+	pthread_emulation_thread_wait_handler_key_initializer()
+	{
+		pthread_key_create(&key, nullptr);
+	}
+		
+	~pthread_emulation_thread_wait_handler_key_initializer()
+	{
+		pthread_key_delete(key);
+	}
+};
+	
+static pthread_key_t get_thread_wait_handler_key()
+{
+	static pthread_emulation_thread_wait_handler_key_initializer initializer;
+	return initializer.key;
+}
+
+#else
 static THREAD_LOCAL wait_handler thread_wait_handler = generic_wait_handler;
+#endif
+
+static void set_thread_wait_handler(wait_handler handler)
+{
+#if defined(EMULATE_PTHREAD_THREAD_LOCAL)
+	// we need to call this here, because the pthread initializer is lazy,
+	// this means the it could be null and we need to set it before trying to
+	// get or set it
+	pthread_setspecific(get_thread_wait_handler_key(), reinterpret_cast<void*>(handler));
+#else
+	thread_wait_handler = handler;
+#endif
+}
+	
+static wait_handler get_thread_wait_handler()
+{
+#if defined(EMULATE_PTHREAD_THREAD_LOCAL)
+	// we need to call this here, because the pthread initializer is lazy,
+	// this means the it could be null and we need to set it before trying to
+	// get or set it
+	wait_handler handler = (wait_handler) pthread_getspecific(get_thread_wait_handler_key());
+	if(handler == nullptr) {
+		return generic_wait_handler;
+	}
+	return handler;
+#else
+	return thread_wait_handler;
+#endif
+}
 
 // Wait for a task to complete
 void wait_for_task(task_base* wait_task)
 {
 	// Dispatch to the current thread's wait handler
+	wait_handler thread_wait_handler = get_thread_wait_handler();
 	thread_wait_handler(task_wait_handle(wait_task));
 }
 
@@ -175,8 +232,8 @@ std::size_t hardware_concurrency() LIBASYNC_NOEXCEPT
 
 wait_handler set_thread_wait_handler(wait_handler handler) LIBASYNC_NOEXCEPT
 {
-	wait_handler old = detail::thread_wait_handler;
-	detail::thread_wait_handler = handler;
+	wait_handler old = detail::get_thread_wait_handler();
+	detail::set_thread_wait_handler(handler);
 	return old;
 }
 
