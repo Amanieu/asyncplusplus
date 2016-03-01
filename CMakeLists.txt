@@ -129,3 +129,8 @@ else()
 	install(FILES ${PROJECT_SOURCE_DIR}/include/async++.h DESTINATION include)
 	install(FILES ${ASYNCXX_INCLUDE} DESTINATION include/async++)
 endif()
+
+SET(CPACK_GENERATOR "DEB")
+SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "none") #required
+
+INCLUDE(CPack)
