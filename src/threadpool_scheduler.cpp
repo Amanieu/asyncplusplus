@@ -301,6 +301,9 @@ static void recursive_spawn_worker_thread(threadpool_data* impl, std::size_t ind
 
 } // namespace detail
 
+threadpool_scheduler::threadpool_scheduler(threadpool_scheduler&& other)
+        : impl(std::move(other.impl)) {}
+
 threadpool_scheduler::threadpool_scheduler(std::size_t num_threads)
 	: impl(new detail::threadpool_data(num_threads))
 {
@@ -314,6 +317,7 @@ threadpool_scheduler::threadpool_scheduler(std::size_t num_threads)
 // Wait for all currently running tasks to finish
 threadpool_scheduler::~threadpool_scheduler()
 {
+    if (!impl) return;
 #ifdef _WIN32
 	// Windows kills all threads except one on process exit before calling
 	// global destructors in DLLs. Waiting for dead threads to exit will likely
