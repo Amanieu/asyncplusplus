@@ -130,6 +130,8 @@ class threadpool_scheduler {
 	std::unique_ptr<detail::threadpool_data> impl;
 
 public:
+	LIBASYNC_EXPORT threadpool_scheduler(threadpool_scheduler&& other);
+
 	// Create a thread pool with the given number of threads
 	LIBASYNC_EXPORT threadpool_scheduler(std::size_t num_threads);
 
