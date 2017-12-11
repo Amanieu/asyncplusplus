@@ -46,6 +46,10 @@ struct threadpool_data {
 	threadpool_data(std::size_t num_threads)
 		: thread_data(num_threads), shutdown(false), num_waiters(0), waiters(new task_wait_event*[num_threads]) {}
 
+    threadpool_data(std::size_t num_threads, std::function<void()>&& prerun_, std::function<void()>&& postrun_)
+		: thread_data(num_threads), shutdown(false), num_waiters(0), waiters(new task_wait_event*[num_threads]),
+          prerun(std::move(prerun_)), postrun(std::move(postrun_)) {}
+
 	// Mutex protecting everything except thread_data
 	std::mutex lock;
 
@@ -62,6 +66,10 @@ struct threadpool_data {
 	// because it is sometimes read outside the mutex.
 	std::atomic<std::size_t> num_waiters;
 	std::unique_ptr<task_wait_event*[]> waiters;
+
+	// Pre/Post run functions.
+    std::function<void()> prerun;
+    std::function<void()> postrun;
 
 #ifdef BROKEN_JOIN_IN_DESTRUCTOR
 	// Shutdown complete event, used instead of thread::join()
@@ -274,8 +282,14 @@ static void worker_thread(threadpool_data* owning_threadpool, std::size_t thread
 	// different steal order.
 	owning_threadpool->thread_data[thread_id].rng.seed(static_cast<std::minstd_rand::result_type>(thread_id));
 
+    // Prerun hook
+    if (owning_threadpool->prerun) owning_threadpool->prerun();
+
 	// Main loop, runs until the shutdown signal is recieved
 	thread_task_loop(owning_threadpool, thread_id, task_wait_handle());
+
+    // Postrun hook
+    if (owning_threadpool->postrun) owning_threadpool->postrun();
 }
 
 // Recursive function to spawn all worker threads in parallel
@@ -313,6 +327,19 @@ threadpool_scheduler::threadpool_scheduler(std::size_t num_threads)
 	impl->thread_data[0].handle.detach();
 #endif
 }
+
+threadpool_scheduler::threadpool_scheduler(std::size_t num_threads,
+                                           std::function<void()>&& prerun,
+                                           std::function<void()>&& postrun)
+    : impl(new detail::threadpool_data(num_threads, std::move(prerun), std::move(postrun)))
+{
+	// Start worker threads
+	impl->thread_data[0].handle = std::thread(detail::recursive_spawn_worker_thread, impl.get(), 0, num_threads);
+#ifdef BROKEN_JOIN_IN_DESTRUCTOR
+	impl->thread_data[0].handle.detach();
+#endif
+}
+
 
 // Wait for all currently running tasks to finish
 threadpool_scheduler::~threadpool_scheduler()

@@ -29,6 +29,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <mutex>
