@@ -135,6 +135,12 @@ public:
 	// Create a thread pool with the given number of threads
 	LIBASYNC_EXPORT threadpool_scheduler(std::size_t num_threads);
 
+	// Create a thread pool with the given number of threads. Call `prerun`
+    // function before execution loop and `postrun` after.
+	LIBASYNC_EXPORT threadpool_scheduler(std::size_t num_threads,
+                                         std::function<void()>&& prerun_,
+                                         std::function<void()>&& postrun_);
+
 	// Destroy the thread pool, tasks that haven't been started are dropped
 	LIBASYNC_EXPORT ~threadpool_scheduler();
 

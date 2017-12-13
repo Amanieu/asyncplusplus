@@ -30,6 +30,8 @@ if (APPLE)
 	endif()
 endif()
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
 # Add all source and header files so IDEs can see them
 set(ASYNCXX_INCLUDE
 	${PROJECT_SOURCE_DIR}/include/async++/aligned_alloc.h
