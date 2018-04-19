@@ -82,8 +82,10 @@
 #endif
 
 // Force symbol visibility to hidden unless explicity exported
+#ifndef LIBASYNC_STATIC
 #if defined(__GNUC__) && !defined(_WIN32)
 # pragma GCC visibility push(hidden)
+#endif
 #endif
 
 // Include other internal headers

@@ -114,8 +114,10 @@
 #endif
 
 // Force symbol visibility to hidden unless explicity exported
+#ifndef LIBASYNC_STATIC
 #if defined(__GNUC__) && !defined(_WIN32)
 # pragma GCC visibility push(hidden)
+#endif
 #endif
 
 // Some forward declarations
@@ -147,8 +149,10 @@ class event_task;
 #include "async++/parallel_for.h"
 #include "async++/parallel_reduce.h"
 
+#ifndef LIBASYNC_STATIC
 #if defined(__GNUC__) && !defined(_WIN32)
 # pragma GCC visibility pop
+#endif
 #endif
 
 #endif

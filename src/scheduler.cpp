@@ -239,6 +239,8 @@ wait_handler set_thread_wait_handler(wait_handler handler) LIBASYNC_NOEXCEPT
 
 } // namespace async
 
+#ifndef LIBASYNC_STATIC
 #if defined(__GNUC__) && !defined(_WIN32)
 # pragma GCC visibility pop
+#endif
 #endif

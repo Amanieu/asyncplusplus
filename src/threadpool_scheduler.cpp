@@ -434,6 +434,8 @@ void threadpool_scheduler::schedule(task_run_handle t)
 
 } // namespace async
 
+#ifndef LIBASYNC_STATIC
 #if defined(__GNUC__) && !defined(_WIN32)
 # pragma GCC visibility pop
+#endif
 #endif
