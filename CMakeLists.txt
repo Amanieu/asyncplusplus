@@ -111,6 +111,16 @@ if (NOT USE_CXX_EXCEPTIONS)
 	endif()
 endif()
 
+include(CMakePackageConfigHelpers)
+configure_package_config_file("${CMAKE_CURRENT_LIST_DIR}/Async++Config.cmake.in"
+	"${PROJECT_BINARY_DIR}/Async++Config.cmake"
+	INSTALL_DESTINATION cmake
+)
+
+install(FILES "${PROJECT_BINARY_DIR}/Async++Config.cmake"
+	DESTINATION cmake
+)
+
 # Install the library and produce a CMake export script
 install(TARGETS Async++
 	EXPORT Async++
