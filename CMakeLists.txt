@@ -92,10 +92,13 @@ if (NOT MSVC)
 	target_compile_options(Async++ PRIVATE -Wall -Wextra -pedantic)
 endif()
 
-# Async++ doesn't make use of RTTI information, so don't generate it
+# Async++ doesn't make use of RTTI information, so don't generate it.
+# There are issues on Apple platforms with exceptions and -fno-rtti, so keep it
+# enabled there.
+# See https://stackoverflow.com/questions/21737201/problems-throwing-and-catching-exceptions-on-os-x-with-fno-rtti
 if (MSVC)
 	target_compile_options(Async++ PRIVATE /GR-)
-else()
+elseif(NOT APPLE)
 	target_compile_options(Async++ PRIVATE -fno-rtti)
 endif()
 
