@@ -70,7 +70,7 @@ class basic_task {
 		// Create continuation
 		typedef continuation_traits<Parent, Func> traits;
 		typedef typename void_to_fake_void<typename traits::task_type::result_type>::type cont_internal_result;
-		typedef continuation_exec_func<Sched, typename std::decay<Parent>::type, cont_internal_result, typename traits::decay_func, traits::is_value_cont::value, is_task<typename traits::result_type>::value> exec_func;
+		typedef continuation_exec_func<Sched, typename std::decay<Parent>::type, cont_internal_result, typename traits::decay_func, typename traits::is_value_cont, is_task<typename traits::result_type>::value> exec_func;
 		typename traits::task_type cont;
 		set_internal_task(cont, task_ptr(new task_func<Sched, exec_func, cont_internal_result>(std::forward<Func>(f), std::forward<Parent>(parent))));
 

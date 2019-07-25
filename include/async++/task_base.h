@@ -523,8 +523,8 @@ struct root_exec_func<Sched, Result, Func, true>: private func_base<Func> {
 
 // Execution functions for continuation tasks:
 // - With and without task unwraping
-// - For value-based and task-based continuations
-template<typename Sched, typename Parent, typename Result, typename Func, bool ValueCont, bool Unwrap>
+// - For void, value-based and task-based continuations
+template<typename Sched, typename Parent, typename Result, typename Func, typename ValueCont, bool Unwrap>
 struct continuation_exec_func: private func_base<Func> {
 	template<typename F, typename P>
 	continuation_exec_func(F&& f, P&& p)
@@ -538,7 +538,7 @@ struct continuation_exec_func: private func_base<Func> {
 	Parent parent;
 };
 template<typename Sched, typename Parent, typename Result, typename Func>
-struct continuation_exec_func<Sched, Parent, Result, Func, true, false>: private func_base<Func> {
+struct continuation_exec_func<Sched, Parent, Result, Func, std::true_type, false>: private func_base<Func> {
 	template<typename F, typename P>
 	continuation_exec_func(F&& f, P&& p)
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
@@ -555,7 +555,24 @@ struct continuation_exec_func<Sched, Parent, Result, Func, true, false>: private
 	Parent parent;
 };
 template<typename Sched, typename Parent, typename Result, typename Func>
-struct continuation_exec_func<Sched, Parent, Result, Func, false, true>: private func_base<Func> {
+struct continuation_exec_func<Sched, Parent, Result, Func, fake_void, false>: private func_base<Func> {
+	template<typename F, typename P>
+	continuation_exec_func(F&& f, P&& p)
+		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
+	void operator()(task_base* t)
+	{
+		if (get_internal_task(parent)->state.load(std::memory_order_relaxed) == task_state::canceled)
+			task_func<Sched, continuation_exec_func, Result>::cancel(t, std::exception_ptr(get_internal_task(parent)->get_exception()));
+		else {
+			static_cast<task_result<Result>*>(t)->set_result(detail::invoke_fake_void(std::move(this->get_func()), fake_void()));
+			static_cast<task_func<Sched, continuation_exec_func, Result>*>(t)->destroy_func();
+			t->finish();
+		}
+	}
+	Parent parent;
+};
+template<typename Sched, typename Parent, typename Result, typename Func>
+struct continuation_exec_func<Sched, Parent, Result, Func, std::false_type, true>: private func_base<Func> {
 	template<typename F, typename P>
 	continuation_exec_func(F&& f, P&& p)
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
@@ -566,7 +583,7 @@ struct continuation_exec_func<Sched, Parent, Result, Func, false, true>: private
 	Parent parent;
 };
 template<typename Sched, typename Parent, typename Result, typename Func>
-struct continuation_exec_func<Sched, Parent, Result, Func, true, true>: private func_base<Func> {
+struct continuation_exec_func<Sched, Parent, Result, Func, std::true_type, true>: private func_base<Func> {
 	template<typename F, typename P>
 	continuation_exec_func(F&& f, P&& p)
 		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
@@ -576,6 +593,20 @@ struct continuation_exec_func<Sched, Parent, Result, Func, true, true>: private 
 			task_func<Sched, continuation_exec_func, Result>::cancel(t, std::exception_ptr(get_internal_task(parent)->get_exception()));
 		else
 			unwrapped_finish<Sched, Result, continuation_exec_func>(t, detail::invoke_fake_void(std::move(this->get_func()), get_internal_task(parent)->get_result(parent)));
+	}
+	Parent parent;
+};
+template<typename Sched, typename Parent, typename Result, typename Func>
+struct continuation_exec_func<Sched, Parent, Result, Func, fake_void, true>: private func_base<Func> {
+	template<typename F, typename P>
+	continuation_exec_func(F&& f, P&& p)
+		: func_base<Func>(std::forward<F>(f)), parent(std::forward<P>(p)) {}
+	void operator()(task_base* t)
+	{
+		if (get_internal_task(parent)->state.load(std::memory_order_relaxed) == task_state::canceled)
+			task_func<Sched, continuation_exec_func, Result>::cancel(t, std::exception_ptr(get_internal_task(parent)->get_exception()));
+		else
+			unwrapped_finish<Sched, Result, continuation_exec_func>(t, detail::invoke_fake_void(std::move(this->get_func()), fake_void()));
 	}
 	Parent parent;
 };

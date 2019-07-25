@@ -114,6 +114,8 @@ typename void_to_fake_void<decltype(std::declval<Func>()())>::type invoke_fake_v
 }
 
 // Various properties of a continuation function
+template<typename Func, typename Parent, typename = decltype(std::declval<Func>()())>
+fake_void is_value_cont_helper(const Parent&, int, int);
 template<typename Func, typename Parent, typename = decltype(std::declval<Func>()(std::declval<Parent>().get()))>
 std::true_type is_value_cont_helper(const Parent&, int, int);
 template<typename Func, typename = decltype(std::declval<Func>()())>
@@ -129,7 +131,7 @@ struct continuation_traits {
 	typedef typename std::decay<Func>::type decay_func;
 	typedef decltype(detail::is_value_cont_helper<decay_func>(std::declval<Parent>(), 0, 0)) is_value_cont;
 	static_assert(!std::is_void<is_value_cont>::value, "Parameter type for continuation function is invalid for parent task type");
-	typedef typename std::conditional<is_value_cont::value, typename void_to_fake_void<decltype(std::declval<Parent>().get())>::type, Parent>::type param_type;
+	typedef typename std::conditional<std::is_same<is_value_cont, fake_void>::value, fake_void, typename std::conditional<std::is_same<is_value_cont, std::true_type>::value, typename void_to_fake_void<decltype(std::declval<Parent>().get())>::type, Parent>::type>::type param_type;
 	typedef decltype(detail::fake_void_to_void(detail::invoke_fake_void(std::declval<decay_func>(), std::declval<param_type>()))) result_type;
 	typedef task<typename remove_task<result_type>::type> task_type;
 };
