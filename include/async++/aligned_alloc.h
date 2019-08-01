@@ -49,6 +49,7 @@ public:
 		} LIBASYNC_CATCH(...) {
 			for (std::size_t j = 0; j < i; j++)
 				ptr[i].~T();
+			aligned_free(ptr);
 			LIBASYNC_RETHROW();
 		}
 	}
