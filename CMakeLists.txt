@@ -30,7 +30,7 @@ if (APPLE)
 	endif()
 endif()
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Add all source and header files so IDEs can see them
 set(ASYNCXX_INCLUDE
@@ -125,11 +125,12 @@ install(FILES "${PROJECT_BINARY_DIR}/Async++Config.cmake"
 )
 
 # Install the library and produce a CMake export script
+include(GNUInstallDirs)
 install(TARGETS Async++
 	EXPORT Async++
-	RUNTIME DESTINATION bin
-	LIBRARY DESTINATION lib
-	ARCHIVE DESTINATION lib
+	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 	FRAMEWORK DESTINATION Frameworks
 )
 export(EXPORT Async++)
