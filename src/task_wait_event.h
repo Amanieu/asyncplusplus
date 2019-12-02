@@ -56,7 +56,7 @@ public:
 	// Check if a specific event is ready
 	bool try_wait(int event)
 	{
-		std::unique_lock<std::mutex> lock(m);
+		std::lock_guard<std::mutex> lock(m);
 		int result = event_mask & event;
 		event_mask &= ~event;
 		return result != 0;
@@ -65,8 +65,9 @@ public:
 	// Signal an event and wake up a sleeping thread
 	void signal(int event)
 	{
-		std::lock_guard<std::mutex> lock(m);
+		std::unique_lock<std::mutex> lock(m);
 		event_mask |= event;
+		lock.unlock();
 		c.notify_one();
 	}
 };
