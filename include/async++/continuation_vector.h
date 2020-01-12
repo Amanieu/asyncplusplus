@@ -120,7 +120,7 @@ public:
 	{
 		// Workaround for a bug in certain versions of clang with libc++
 		// error: no viable conversion from 'async::detail::compressed_ptr<3, true>' to '_Atomic(async::detail::compressed_ptr<3, true>)'
-		std::atomic_init(&atomic_data, internal_data(nullptr, 0));
+		atomic_data.store(internal_data(nullptr, 0), std::memory_order_relaxed);
 	}
 
 	// Free any left over data
