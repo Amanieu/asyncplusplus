@@ -97,8 +97,11 @@ public:
 	{
 		std::unique_lock<std::mutex> lock(mutex());
 		event_mask |= event;
-		lock.unlock();
+
+		// This must be done while holding the lock otherwise we may end up with
+		// a use-after-free due to a race with wait().
 		cond().notify_one();
+		lock.unlock();
 	}
 };
 
