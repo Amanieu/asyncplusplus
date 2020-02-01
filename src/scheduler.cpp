@@ -57,16 +57,17 @@ void aligned_free(void* addr) LIBASYNC_NOEXCEPT
 static void generic_wait_handler(task_wait_handle wait_task)
 {
 	// Create an event to wait on
-	task_wait_event thread_event;
+	task_wait_event event;
+	event.init();
 
 	// Create a continuation for the task we are waiting for
-	wait_task.on_finish([&thread_event] {
+	wait_task.on_finish([&event] {
 		// Just signal the thread event
-		thread_event.signal(wait_type::task_finished);
+		event.signal(wait_type::task_finished);
 	});
 
 	// Wait for the event to be set
-	thread_event.wait();
+	event.wait();
 }
 
 #if defined(EMULATE_PTHREAD_THREAD_LOCAL)

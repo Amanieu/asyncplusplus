@@ -37,7 +37,6 @@ namespace detail {
 struct LIBASYNC_CACHELINE_ALIGN thread_data_t {
 	work_steal_queue queue;
 	std::minstd_rand rng;
-	task_wait_event event;
 	std::thread handle;
 };
 
@@ -180,11 +179,15 @@ static void thread_task_loop(threadpool_data* impl, std::size_t thread_id, task_
 	// Flag indicating if we have added a continuation to the task
 	bool added_continuation = false;
 
+	// Event to wait on
+	task_wait_event event;
+
 	// Loop while waiting for the task to complete
 	while (true) {
 		// Check if the task has finished. If we have added a continuation, we
-		// need to make sure the event has been signaled.
-		if (wait_task && (added_continuation ? current_thread.event.try_wait(wait_type::task_finished) : wait_task.ready()))
+		// need to make sure the event has been signaled, otherwise the other
+		// thread may try to signal it after we have freed it.
+		if (wait_task && (added_continuation ? event.try_wait(wait_type::task_finished) : wait_task.ready()))
 			return;
 
 		// Try to get a task from the local queue
@@ -220,11 +223,13 @@ static void thread_task_loop(threadpool_data* impl, std::size_t thread_id, task_
 				return;
 			}
 
+			// Initialize the event object
+			event.init();
+
 			// No tasks found, so sleep until something happens.
 			// If a continuation has not been added yet, add it.
 			if (wait_task && !added_continuation) {
 				// Create a continuation for the task we are waiting for
-				task_wait_event& event = current_thread.event;
 				wait_task.on_finish([&event] {
 					// Signal the thread's event
 					event.signal(wait_type::task_finished);
@@ -234,19 +239,19 @@ static void thread_task_loop(threadpool_data* impl, std::size_t thread_id, task_
 
 			// Add our thread to the list of waiting threads
 			size_t num_waiters_val = impl->num_waiters.load(std::memory_order_relaxed);
-			impl->waiters[num_waiters_val] = &current_thread.event;
+			impl->waiters[num_waiters_val] = &event;
 			impl->num_waiters.store(num_waiters_val + 1, std::memory_order_relaxed);
 
 			// Wait for our event to be signaled when a task is scheduled or
 			// the task we are waiting for has completed.
 			locked.unlock();
-			int events = current_thread.event.wait();
+			int events = event.wait();
 			locked.lock();
 
 			// Remove our thread from the list of waiting threads
 			num_waiters_val = impl->num_waiters.load(std::memory_order_relaxed);
 			for (std::size_t i = 0; i < num_waiters_val; i++) {
-				if (impl->waiters[i] == &current_thread.event) {
+				if (impl->waiters[i] == &event) {
 					if (i != num_waiters_val - 1)
 						std::swap(impl->waiters[i], impl->waiters[num_waiters_val - 1]);
 					impl->num_waiters.store(num_waiters_val - 1, std::memory_order_relaxed);
@@ -254,7 +259,9 @@ static void thread_task_loop(threadpool_data* impl, std::size_t thread_id, task_
 				}
 			}
 
-			// Check again if the task has finished
+			// Check again if the task has finished. We have added a
+			// continuation at this point, so we need to check that the
+			// continuation has finished signaling the event.
 			if (wait_task && (events & wait_type::task_finished))
 				return;
 		}
