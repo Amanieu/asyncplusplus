@@ -34,8 +34,8 @@ class compressed_ptr {
 
 public:
 	compressed_ptr() = default;
-	compressed_ptr(void* ptr, std::uintptr_t flags)
-		: ptr(ptr), flags(flags) {}
+	compressed_ptr(void* ptr_, std::uintptr_t flags_)
+		: ptr(ptr_), flags(flags_) {}
 
 	template<typename T>
 	T* get_ptr() const
@@ -62,8 +62,8 @@ class compressed_ptr<Mask, true> {
 
 public:
 	compressed_ptr() = default;
-	compressed_ptr(void* ptr, std::uintptr_t flags)
-		: data(reinterpret_cast<std::uintptr_t>(ptr) | flags) {}
+	compressed_ptr(void* ptr_, std::uintptr_t flags_)
+		: data(reinterpret_cast<std::uintptr_t>(ptr_) | flags_) {}
 
 	template<typename T>
 	T* get_ptr() const

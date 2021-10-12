@@ -58,8 +58,8 @@ struct when_all_func_range {
 	std::size_t index;
 	ref_count_ptr<when_all_state<Result>> state;
 
-	when_all_func_range(std::size_t index, ref_count_ptr<when_all_state<Result>> state)
-		: index(index), state(std::move(state)) {}
+	when_all_func_range(std::size_t index_, ref_count_ptr<when_all_state<Result>> state_)
+		: index(index_), state(std::move(state_)) {}
 
 	// Copy the completed task object to the shared state. The event is
 	// automatically signaled when all references are dropped.
@@ -72,8 +72,8 @@ template<std::size_t index, typename Task, typename Result>
 struct when_all_func_tuple {
 	ref_count_ptr<when_all_state<Result>> state;
 
-	when_all_func_tuple(ref_count_ptr<when_all_state<Result>> state)
-		: state(std::move(state)) {}
+	when_all_func_tuple(ref_count_ptr<when_all_state<Result>> state_)
+		: state(std::move(state_)) {}
 
 	// Copy the completed task object to the shared state. The event is
 	// automatically signaled when all references are dropped.
@@ -105,8 +105,8 @@ struct when_any_func {
 	std::size_t index;
 	ref_count_ptr<when_any_state<Result>> state;
 
-	when_any_func(std::size_t index, ref_count_ptr<when_any_state<Result>> state)
-		: index(index), state(std::move(state)) {}
+	when_any_func(std::size_t index_, ref_count_ptr<when_any_state<Result>> state_)
+		: index(index_), state(std::move(state_)) {}
 
 	// Simply tell the state that our task has finished, it already has a copy
 	// of the task object.
