@@ -38,8 +38,8 @@ public:
 		: length(0), ptr(nullptr) {}
 	aligned_array(std::nullptr_t)
 		: length(0), ptr(nullptr) {}
-	explicit aligned_array(std::size_t length)
-		: length(length)
+	explicit aligned_array(std::size_t length_)
+		: length(length_)
 	{
 		ptr = static_cast<T*>(aligned_alloc(length * sizeof(T), Align));
 		std::size_t i;

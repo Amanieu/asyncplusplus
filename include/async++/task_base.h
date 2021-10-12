@@ -111,8 +111,8 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base, task
 	void run_continuations()
 	{
 		continuations.flush_and_lock([this](task_ptr t) {
-			const task_base_vtable* vtable = t->vtable;
-			vtable->schedule(this, std::move(t));
+			const task_base_vtable* vtable_ptr = t->vtable;
+			vtable_ptr->schedule(this, std::move(t));
 		});
 	}
 
@@ -271,17 +271,17 @@ struct task_result: public task_result_holder<Result> {
 	}
 
 	// Cancel a task with the given exception
-	void cancel_base(std::exception_ptr&& except)
+	void cancel_base(std::exception_ptr&& except_)
 	{
-		set_exception(std::move(except));
+		set_exception(std::move(except_));
 		this->state.store(task_state::canceled, std::memory_order_release);
 		this->run_continuations();
 	}
 
 	// Set the exception value of the task
-	void set_exception(std::exception_ptr&& except)
+	void set_exception(std::exception_ptr&& except_)
 	{
-		new(&this->except) std::exception_ptr(std::move(except));
+		new(&this->except) std::exception_ptr(std::move(except_));
 	}
 
 	// Get the exception a task was canceled with

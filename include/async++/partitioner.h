@@ -57,8 +57,8 @@ class static_partitioner_impl {
 	std::size_t grain;
 
 public:
-	static_partitioner_impl(Iter begin, Iter end, std::size_t grain)
-		: iter_begin(begin), iter_end(end), grain(grain) {}
+	static_partitioner_impl(Iter begin_, Iter end_, std::size_t grain_)
+		: iter_begin(begin_), iter_end(end_), grain(grain_) {}
 	Iter begin() const
 	{
 		return iter_begin;
@@ -92,8 +92,8 @@ class auto_partitioner_impl {
 
 public:
 	// thread_id is initialized to "no thread" and will be set on first split
-	auto_partitioner_impl(Iter begin, Iter end, std::size_t grain)
-		: iter_begin(begin), iter_end(end), grain(grain) {}
+	auto_partitioner_impl(Iter begin_, Iter end_, std::size_t grain_)
+		: iter_begin(begin_), iter_end(end_), grain(grain_) {}
 	Iter begin() const
 	{
 		return iter_begin;
