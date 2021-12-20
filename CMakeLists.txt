@@ -114,6 +114,19 @@ if (NOT USE_CXX_EXCEPTIONS)
 	endif()
 endif()
 
+# /Zc:__cplusplus is required to make __cplusplus accurate
+# /Zc:__cplusplus is available starting with Visual Studio 2017 version 15.7
+# (according to https://docs.microsoft.com/en-us/cpp/build/reference/zc-cplusplus)
+# That version is equivalent to _MSC_VER==1914
+# (according to https://docs.microsoft.com/en-us/cpp/preprocessor/predefined-macros?view=vs-2019)
+# CMake's ${MSVC_VERSION} is equivalent to _MSC_VER
+# (according to https://cmake.org/cmake/help/latest/variable/MSVC_VERSION.html#variable:MSVC_VERSION)
+# GREATER and EQUAL are used because GREATER_EQUAL is available starting with CMake 3.7
+# (according to https://cmake.org/cmake/help/v3.7/release/3.7.html#commands)
+if ((MSVC) AND ((MSVC_VERSION GREATER 1914) OR (MSVC_VERSION EQUAL 1914)))
+    target_compile_options(Async++ PUBLIC /Zc:__cplusplus)
+endif()
+
 include(CMakePackageConfigHelpers)
 configure_package_config_file("${CMAKE_CURRENT_LIST_DIR}/Async++Config.cmake.in"
 	"${PROJECT_BINARY_DIR}/Async++Config.cmake"
