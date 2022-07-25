@@ -98,7 +98,7 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base, task
 	void run_continuation(Sched& sched, task_ptr&& cont)
 	{
 		LIBASYNC_TRY {
-			detail::schedule_task(sched, std::move(cont));
+			detail::schedule_task(sched, cont);
 		} LIBASYNC_CATCH(...) {
 			// This is suboptimal, but better than letting the exception leak
 			cont->vtable->cancel(cont.get(), std::current_exception());
