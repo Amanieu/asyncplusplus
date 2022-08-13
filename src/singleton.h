@@ -39,7 +39,7 @@ template<typename T>
 class singleton {
 	std::mutex lock;
 	std::atomic<bool> init_flag;
-	typename std::aligned_storage<sizeof(T), std::alignment_of<T>::value>::type storage;
+	alignas(T) std::uint8_t storage[sizeof(T)];
 
 	static singleton instance;
 
