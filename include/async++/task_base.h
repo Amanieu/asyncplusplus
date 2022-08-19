@@ -166,8 +166,8 @@ struct task_base_deleter {
 template<typename Result>
 struct task_result_holder: public task_base {
 	union {
-		typename std::aligned_storage<sizeof(Result), std::alignment_of<Result>::value>::type result;
-		std::aligned_storage<sizeof(std::exception_ptr), std::alignment_of<std::exception_ptr>::value>::type except;
+		alignas(Result) std::uint8_t result[sizeof(Result)];
+		alignas(std::exception_ptr) std::uint8_t except[sizeof(std::exception_ptr)];
 
 		// Scheduler that should be used to schedule this task. The scheduler
 		// type has been erased and is held by vtable->schedule.
@@ -208,7 +208,7 @@ struct task_result_holder<Result&>: public task_base {
 	union {
 		// Store as pointer internally
 		Result* result;
-		std::aligned_storage<sizeof(std::exception_ptr), std::alignment_of<std::exception_ptr>::value>::type except;
+		alignas(std::exception_ptr) std::uint8_t except[sizeof(std::exception_ptr)];
 		void* sched;
 	};
 
@@ -233,7 +233,7 @@ struct task_result_holder<Result&>: public task_base {
 template<>
 struct task_result_holder<fake_void>: public task_base {
 	union {
-		std::aligned_storage<sizeof(std::exception_ptr), std::alignment_of<std::exception_ptr>::value>::type except;
+		alignas(std::exception_ptr) std::uint8_t except[sizeof(std::exception_ptr)];
 		void* sched;
 	};
 
@@ -344,7 +344,7 @@ struct func_base<Func, typename std::enable_if<std::is_empty<Func>::value>::type
 // Class to hold a function object and initialize/destroy it at any time
 template<typename Func, typename = void>
 struct func_holder {
-	typename std::aligned_storage<sizeof(Func), std::alignment_of<Func>::value>::type func;
+	alignas(Func) std::uint8_t func[sizeof(Func)];
 
 	Func& get_func()
 	{

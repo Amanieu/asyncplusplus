@@ -35,8 +35,8 @@ enum wait_type {
 //
 // The event object is lazily initialized to avoid unnecessary API calls.
 class task_wait_event {
-	std::aligned_storage<sizeof(std::mutex), std::alignment_of<std::mutex>::value>::type m;
-	std::aligned_storage<sizeof(std::condition_variable), std::alignment_of<std::condition_variable>::value>::type c;
+	alignas(std::mutex) std::uint8_t m[sizeof(std::mutex)];
+	alignas(std::condition_variable) std::uint8_t c[sizeof(std::condition_variable)];
 	int event_mask;
 	bool initialized;
 
