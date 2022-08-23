@@ -294,6 +294,17 @@ public:
 	// Movable and copyable
 	shared_task() = default;
 
+	// Move constructor for task	
+	shared_task(task<Result>&& other) LIBASYNC_NOEXCEPT
+		: detail::basic_task<Result>(std::move(other)) {}
+
+	// Move-assignment for task
+	shared_task& operator=(task<Result>&& other) LIBASYNC_NOEXCEPT
+	{
+		detail::basic_task<Result>::operator=(std::move(other));
+		return *this;
+	}
+
 	// Get the result of the task
 	get_result get() const
 	{

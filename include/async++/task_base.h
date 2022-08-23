@@ -65,13 +65,13 @@ struct LIBASYNC_CACHELINE_ALIGN task_base: public ref_count_base<task_base, task
 	std::atomic<task_state> state;
 
 	// Whether get_task() was already called on an event_task
-	bool event_task_got_task;
+	bool event_task_got_task{};
 
 	// Vector of continuations
 	continuation_vector continuations;
 
 	// Virtual function table used for dynamic dispatch
-	const task_base_vtable* vtable;
+	const task_base_vtable* vtable{};
 
 	// Use aligned memory allocation
 	static void* operator new(std::size_t size)
