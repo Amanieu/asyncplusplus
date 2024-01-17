@@ -70,6 +70,7 @@ Supported Platforms
 The only requirement to use Async++ is a C++11 compiler and standard library. Unfortunately C++11 is not yet fully implemented on most platforms. Here is the list of OS and compiler combinations which are known to work.
 
 - Linux: Works with GCC 4.7+, Clang 3.2+ and Intel compiler 15+.
+- FreeBSD 13+: Works with Clang from base system.
 - Mac: Works with Apple Clang (using libc++). GCC also works but you must get a recent version (4.7+).
 - iOS: Works with Apple Clang (using libc++). Note: because iOS has no thread local support, the library uses a workaround based on pthreads.
 - Windows: Works with GCC 4.8+ (with pthread-win32) and Visual Studio 2013+.
