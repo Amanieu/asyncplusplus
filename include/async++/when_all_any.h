@@ -88,6 +88,7 @@ template<typename Result>
 struct when_any_state: public ref_count_base<when_any_state<Result>> {
 	event_task<when_any_result<Result>> event;
 	Result result;
+	std::atomic_bool is_set{false};
 
 	when_any_state(std::size_t count)
 		: ref_count_base<when_any_state<Result>>(count) {}
@@ -95,7 +96,10 @@ struct when_any_state: public ref_count_base<when_any_state<Result>> {
 	// Signal the event when the first task reaches here
 	void set(std::size_t i)
 	{
-		event.set({i, std::move(result)});
+		bool expected = false;
+		if (is_set.compare_exchange_strong(expected, true, std::memory_order_acquire, std::memory_order_relaxed)) {
+			event.set({i, std::move(result)});
+		}
 	}
 };
 
