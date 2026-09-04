@@ -143,8 +143,8 @@ class basic_event {
 	friend typename T::internal_task_type* get_internal_task(const T& t);
 
 	// Common code for set()
-	template<typename T>
-	bool set_internal(T&& result) const
+	template<typename Func>
+	bool set_internal_with(Func&& f) const
 	{
 		LIBASYNC_ASSERT(internal_task, std::invalid_argument, "Use of empty event_task object");
 
@@ -155,7 +155,7 @@ class basic_event {
 
 		LIBASYNC_TRY {
 			// Store the result and finish
-			get_internal_task(*this)->set_result(std::forward<T>(result));
+			get_internal_task(*this)->set_result(f());
 			internal_task->finish();
 		} LIBASYNC_CATCH(...) {
 			// At this point we have already committed to setting a value, so
@@ -166,6 +166,12 @@ class basic_event {
 			get_internal_task(*this)->cancel_base(std::current_exception());
 		}
 		return true;
+	}
+
+	template<typename T>
+	bool set_internal(T&& result) const
+	{
+		return set_internal_with([&] { return std::forward<T>(result); });
 	}
 
 public:
@@ -337,6 +343,12 @@ public:
 	{
 		return this->set_internal(std::move(result));
 	}
+	
+	template<typename Func>
+	bool set_with(Func&& f) const
+	{
+		return this->set_internal_with(std::forward<Func>(f));
+	}
 };
 
 // Specialization for references
@@ -358,6 +370,11 @@ public:
 	{
 		return this->set_internal(result);
 	}
+	template<typename Func>
+	bool set_with(Func&& f) const
+	{
+		return this->set_internal_with(std::forward<Func>(f));
+	}
 };
 
 // Specialization for void
@@ -378,6 +395,15 @@ public:
 	bool set()
 	{
 		return this->set_internal(detail::fake_void());
+	}
+
+	template<typename Func>
+	bool set_with(Func&& f)
+	{
+		return this->set_internal_with([&f] { 
+			f(); 
+			return detail::fake_void(); 
+		});
 	}
 };
 
