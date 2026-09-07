@@ -155,7 +155,7 @@ class basic_event {
 
 		LIBASYNC_TRY {
 			// Store the result and finish
-			get_internal_task(*this)->set_result(f());
+			get_internal_task(*this)->set_result(std::forward<Func>(f)());
 			internal_task->finish();
 		} LIBASYNC_CATCH(...) {
 			// At this point we have already committed to setting a value, so
@@ -171,7 +171,9 @@ class basic_event {
 	template<typename T>
 	bool set_internal(T&& result) const
 	{
-		return set_internal_with([&] { return std::forward<T>(result); });
+		return set_internal_with([&]() -> T&& { 
+			return std::forward<T>(result); 
+		});
 	}
 
 public:
@@ -401,7 +403,7 @@ public:
 	bool set_with(Func&& f)
 	{
 		return this->set_internal_with([&f] { 
-			f(); 
+			std::forward<Func>(f)(); 
 			return detail::fake_void(); 
 		});
 	}
