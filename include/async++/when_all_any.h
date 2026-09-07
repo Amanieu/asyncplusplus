@@ -95,7 +95,10 @@ struct when_any_state: public ref_count_base<when_any_state<Result>> {
 	// Signal the event when the first task reaches here
 	void set(std::size_t i)
 	{
-		event.set({i, std::move(result)});
+		// The lambda guarantees the arguments are only evaluated by the winning thread
+		event.set_with([this, i] { 
+			return when_any_result<Result>{i, std::move(result)}; 
+		});
 	}
 };
 
