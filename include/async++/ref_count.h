@@ -99,23 +99,25 @@ public:
 	}
 	ref_count_ptr& operator=(const ref_count_ptr& other) LIBASYNC_NOEXCEPT
 	{
-		if (p) {
-			p->remove_ref();
-			p = nullptr;
+		if (this != &other) {
+			if (p) {
+				p->remove_ref();
+			}
+			p = other.p;
+			if (p)
+				p->add_ref();
 		}
-		p = other.p;
-		if (p)
-			p->add_ref();
 		return *this;
 	}
 	ref_count_ptr& operator=(ref_count_ptr&& other) LIBASYNC_NOEXCEPT
 	{
-		if (p) {
-			p->remove_ref();
-			p = nullptr;
+		if (this != &other) {
+			if (p) {
+				p->remove_ref();
+			}
+			p = other.p;
+			other.p = nullptr;
 		}
-		p = other.p;
-		other.p = nullptr;
 		return *this;
 	}
 	~ref_count_ptr()
