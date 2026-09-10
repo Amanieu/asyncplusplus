@@ -30,6 +30,8 @@ if (APPLE)
 	endif()
 endif()
 
+set(Async++_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/Async++" CACHE STRING "Async++ CMake package install directory")
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Add all source and header files so IDEs can see them
@@ -130,11 +132,11 @@ endif()
 include(CMakePackageConfigHelpers)
 configure_package_config_file("${CMAKE_CURRENT_LIST_DIR}/Async++Config.cmake.in"
 	"${PROJECT_BINARY_DIR}/Async++Config.cmake"
-	INSTALL_DESTINATION cmake
+	INSTALL_DESTINATION "${Async++_INSTALL_CMAKEDIR}"
 )
 
 install(FILES "${PROJECT_BINARY_DIR}/Async++Config.cmake"
-	DESTINATION cmake
+	DESTINATION "${Async++_INSTALL_CMAKEDIR}"
 )
 
 # Install the library and produce a CMake export script
@@ -147,7 +149,7 @@ install(TARGETS Async++
 	FRAMEWORK DESTINATION Frameworks
 )
 export(EXPORT Async++)
-install(EXPORT Async++ DESTINATION cmake)
+install(EXPORT Async++ DESTINATION "${Async++_INSTALL_CMAKEDIR}")
 if (APPLE AND BUILD_FRAMEWORK)
 	set_target_properties(Async++ PROPERTIES OUTPUT_NAME Async++ FRAMEWORK ON)
 	set_source_files_properties(${ASYNCXX_INCLUDE} PROPERTIES MACOSX_PACKAGE_LOCATION Headers/async++)
