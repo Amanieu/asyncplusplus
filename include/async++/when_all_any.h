@@ -140,6 +140,21 @@ void when_all_variadic(when_all_state<Result>* state, First&& first, T&&... task
 	detail::when_all_variadic<index + 1>(state, std::forward<T>(tasks)...);
 }
 
+// Copy all tasks before any inline continuation can move the result.
+template<std::size_t index, typename Result>
+void when_any_copy_variadic(when_any_state<Result>*) {}
+template<std::size_t index, typename Result, typename First, typename... T>
+void when_any_copy_variadic(when_any_state<Result>* state, First&& first, T&&... tasks)
+{
+	// Add a copy of the task to the results because the event may be
+	// set before all tasks have finished.
+	detail::task_base* t = detail::get_internal_task(first);
+	t->add_ref();
+	detail::set_internal_task(std::get<index>(state->result), detail::task_ptr(t));
+
+	detail::when_any_copy_variadic<index + 1>(state, std::forward<T>(tasks)...);
+}
+
 // Internal implementation of when_any for variadic arguments
 template<std::size_t index, typename Result>
 void when_any_variadic(when_any_state<Result>*) {}
@@ -147,12 +162,6 @@ template<std::size_t index, typename Result, typename First, typename... T>
 void when_any_variadic(when_any_state<Result>* state, First&& first, T&&... tasks)
 {
 	typedef typename std::decay<First>::type task_type;
-
-	// Add a copy of the task to the results because the event may be
-	// set before all tasks have finished.
-	detail::task_base* t = detail::get_internal_task(first);
-	t->add_ref();
-	detail::set_internal_task(std::get<index>(state->result), detail::task_ptr(t));
 
 	// Add a continuation to the task
 	LIBASYNC_TRY {
@@ -218,14 +227,16 @@ task<when_any_result<std::vector<typename std::decay<typename std::iterator_trai
 	state->result.resize(count);
 	auto out = state->event.get_task();
 
+	// Populate the entire result before an inline continuation can move it.
+	std::size_t index = 0;
+	for (Iter it = begin; it != end; ++index, ++it) {
+		detail::task_base* t = detail::get_internal_task(*it);
+		t->add_ref();
+		detail::set_internal_task(state->result[index], detail::task_ptr(t));
+	}
+
 	// Add a continuation to each task to set the event. First one wins.
 	for (std::size_t i = 0; begin != end; i++, ++begin) {
-		// Add a copy of the task to the results because the event may be
-		// set before all tasks have finished.
-		detail::task_base* t = detail::get_internal_task(*begin);
-		t->add_ref();
-		detail::set_internal_task(state->result[i], detail::task_ptr(t));
-
 		LIBASYNC_TRY {
 			(*begin).then(inline_scheduler(), detail::when_any_func<task_type, result_type>(i, detail::ref_count_ptr<detail::when_any_state<result_type>>(state)));
 		} LIBASYNC_CATCH(...) {
@@ -286,7 +297,8 @@ task<when_any_result<std::tuple<typename std::decay<T>::type...>>> when_any(T&&.
 	auto state = new detail::when_any_state<result_type>(sizeof...(tasks));
 	auto out = state->event.get_task();
 
-	// Register all the tasks on the event
+	// Copy all tasks before registering potentially immediate continuations.
+	detail::when_any_copy_variadic<0>(state, std::forward<T>(tasks)...);
 	detail::when_any_variadic<0>(state, std::forward<T>(tasks)...);
 
 	return out;
